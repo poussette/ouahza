@@ -1,1 +1,1 @@
-v0.1.7: 3e release pour test d'update in app.
+v0.1.8: patch pour régler le problème de téléchargement d'update et de son auto-install.

@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.7"
+__version__ = "0.1.8"
 
 
 
@@ -60,7 +60,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.7"
+APP_VERSION = "0.1.8"
 
 
 def _version_problems() -> list[str]:
@@ -763,11 +763,65 @@ class OuahzaApp(App):
             req.setDescription("Mise à jour : touche cette notification une fois terminé")
             req.setMimeType("application/vnd.android.package-archive")
             req.setNotificationVisibility(Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            req.setDestinationInExternalFilesDir(activity, "Download", name)
-            dm.enqueue(req)
+            # Public Downloads folder: the system download manager / Files app can
+            # open it (the app-private folder used before was not openable).
+            Environment = autoclass("android.os.Environment")
+            req.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
+            self._ask_install_permission(activity)
+            self._dl_id = dm.enqueue(req)
+            self._watch_download()
             return True
         except Exception:  # noqa: BLE001 - fall back to the browser
             return False
+
+    def _ask_install_permission(self, activity) -> None:
+        """Android 8+: installing an APK needs the per-app "install unknown
+        apps" switch; open its settings page once if it is still off."""
+        try:
+            from jnius import autoclass
+            if activity.getPackageManager().canRequestPackageInstalls():
+                return
+            Intent = autoclass("android.content.Intent")
+            Uri = autoclass("android.net.Uri")
+            i = Intent("android.settings.MANAGE_UNKNOWN_APP_SOURCES",
+                       Uri.parse("package:" + activity.getPackageName()))
+            activity.startActivity(i)
+        except Exception:  # noqa: BLE001
+            pass
+
+    def _watch_download(self) -> None:
+        """When the download we started completes, open the system installer
+        straight away (the notification stays as a fallback)."""
+        if getattr(self, "_dl_receiver", None) is not None:
+            return
+        try:
+            from android.broadcast import BroadcastReceiver
+            self._dl_receiver = BroadcastReceiver(
+                self._on_download_done, actions=["android.intent.action.DOWNLOAD_COMPLETE"],
+            )
+            self._dl_receiver.start()
+        except Exception:  # noqa: BLE001 - the notification still works
+            self._dl_receiver = None
+
+    def _on_download_done(self, context, intent) -> None:
+        try:
+            from jnius import autoclass
+            if intent.getLongExtra("extra_download_id", -1) != getattr(self, "_dl_id", -2):
+                return
+            Context = autoclass("android.content.Context")
+            Intent = autoclass("android.content.Intent")
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            uri = activity.getSystemService(Context.DOWNLOAD_SERVICE).getUriForDownloadedFile(self._dl_id)
+            if uri is None:  # download failed
+                Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Téléchargement de la mise à jour échoué."))
+                return
+            view = Intent(Intent.ACTION_VIEW)
+            view.setDataAndType(uri, "application/vnd.android.package-archive")
+            view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK)
+            activity.startActivity(view)
+            Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Installation de la mise à jour..."))
+        except Exception:  # noqa: BLE001 - tap the download notification instead
+            pass
 
     def _open_url(self, url: str) -> None:
         """Hand the release link to the system (browser/download manager)."""
@@ -815,8 +869,8 @@ class OuahzaApp(App):
             popup.dismiss()
             if self._download_apk(info):
                 self.status_label.text = (
-                    "Téléchargement lancé : quand la notification « Téléchargement terminé » "
-                    "apparaît, touche-la pour installer."
+                    "Téléchargement lancé : l'installation s'ouvre à la fin "
+                    "(sinon touche la notification « Téléchargement terminé »)."
                 )
             else:
                 self._open_url(info["url"])

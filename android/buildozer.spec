@@ -4,12 +4,12 @@ package.name = ouahza
 package.domain = org.ouahza
 source.dir = .
 source.include_exts = py
-version = 0.1.7
+version = 0.1.8
 requirements = python3,kivy,requests,certifi,urllib3,idna,charset_normalizer
 orientation = portrait
 fullscreen = 0
 
-android.permissions = INTERNET
+android.permissions = INTERNET,REQUEST_INSTALL_PACKAGES
 
 # Security: keep the app's private data (wallet list, API keys) out of
 # Android cloud/adb backups.
