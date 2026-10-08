@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.11"
+__version__ = "0.1.12"
 
 
 
@@ -612,6 +612,8 @@ _CACHE = LPCache()
 def set_cache_path(path: str | None) -> None:
     """Persist the discovery cache at `path` (None = memory only)."""
     global _CACHE
+    if path is not None and _CACHE.path == path:
+        return  # same file: keep the live cache and the 15-minute prices (the app calls this on every refresh)
     _CACHE = LPCache(path)
     clear_runtime_caches()
 

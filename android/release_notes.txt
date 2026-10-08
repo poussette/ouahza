@@ -1,1 +1,1 @@
-v0.1.11: Valorisation LP plus rapide : prix gardé 15 min, lecture allégée des pools déjà connus ; requêtes plus rapprochées vers l'API MultiversX
+v0.1.12: Correctif : le cache de prix LP (15 min) n'était pas conservé entre deux actualisations.

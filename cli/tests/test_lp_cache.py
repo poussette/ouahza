@@ -98,6 +98,20 @@ class LPCacheTests(unittest.TestCase):
         single = [x for x in c.calls if x[1].endswith("/tokens/" + LPID)]
         self.assertEqual(single, [])     # no individual /tokens/<LP> call
 
+    def test_repeated_set_cache_path_keeps_prices(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lp_cache.json")
+            lp.set_cache_path(path)
+            c = self.chain()
+            price(c)
+            n = len(c.calls)
+            lp.set_cache_path(path)          # what the app does at every refresh
+            price(c)
+            self.assertEqual(len(c.calls), n)
+            lp.set_cache_path(None)          # a different cache: start clean
+            self.assertFalse(lp._PRICES)
+
     def test_trust_change_drops_cached_prices(self):
         c = self.chain()
         price(c)
