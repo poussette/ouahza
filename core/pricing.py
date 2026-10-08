@@ -25,7 +25,7 @@ address, its platform id to TOKEN_PLATFORM_IDS.
 
 from __future__ import annotations
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 
@@ -33,6 +33,9 @@ __version__ = "0.1.9"
 
 
 import os
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -49,6 +52,49 @@ FX_API = "https://api.frankfurter.app"  # free, no key, ECB-sourced FX rates
 MAX_PAGES = 20
 #: a USD->EUR rate outside this range is an API glitch, not a real FX rate.
 FX_MIN, FX_MAX = 0.05, 20.0
+
+# ------------------------------------------------------------------ price cache
+# Prices barely move within a couple of minutes, so a second refresh right
+# after the first one reuses them instead of calling the (rate-limited)
+# public APIs again. Only successful answers are cached ("not priced" answers
+# too, so spam tokens are not asked again and again); a failed request is
+# never cached. Each kind of request is single-flight: a background prefetch
+# and the main run never fire the same call twice.
+PRICE_TTL = 120.0        # CoinGecko native / token prices
+MEX_TTL = 180.0          # xExchange prices (/mex-tokens, /tokens)
+FX_TTL = 12 * 3600.0     # USD -> EUR (ECB rate, published once a day)
+
+_MISS = object()
+_cache: dict = {}
+_cache_lock = threading.Lock()
+_kind_locks: dict[str, threading.Lock] = {}
+
+
+def clear_cache() -> None:
+    with _cache_lock:
+        _cache.clear()
+
+
+def _cache_get(key, ttl: float):
+    with _cache_lock:
+        hit = _cache.get(key)
+    if hit is not None and time.monotonic() - hit[0] < ttl:
+        return hit[1]
+    return _MISS
+
+
+def _cache_put(key, value) -> None:
+    with _cache_lock:
+        _cache[key] = (time.monotonic(), value)
+
+
+def _kind_lock(kind: str) -> threading.Lock:
+    with _cache_lock:
+        return _kind_locks.setdefault(kind, threading.Lock())
+
+
+#: seconds spent per stage in the last apply_pricing run (shown by the app).
+LAST_TIMINGS: dict[str, float] = {}
 
 
 def _clean_price_map(vals) -> dict[str, float]:
@@ -108,22 +154,35 @@ def _fetch_native_prices(chain_ids: set[str]) -> dict[str, dict[str, float]]:
     }
     if not gecko_ids:
         return {}
-    try:
-        data = request_json(
-            "GET",
-            f"{COINGECKO_API}/simple/price",
-            params={"ids": ",".join(sorted(gecko_ids)), "vs_currencies": "usd,eur"},
-        )
-        if not isinstance(data, dict):
-            return {}
-    except requests.RequestException:
-        return {}
-
-    result: dict[str, dict[str, float]] = {}
-    for chain_id, gecko_id in NATIVE_COINGECKO_IDS.items():
-        if gecko_id in data:
-            result[chain_id] = _clean_price_map(data[gecko_id])
-    return result
+    fresh: dict[str, dict[str, float]] = {}
+    with _kind_lock("native"):
+        missing = {g for g in gecko_ids if _cache_get(("native", g), PRICE_TTL) is _MISS}
+        if missing:
+            try:
+                data = request_json(
+                    "GET",
+                    f"{COINGECKO_API}/simple/price",
+                    params={"ids": ",".join(sorted(missing)), "vs_currencies": "usd,eur"},
+                )
+                if isinstance(data, dict):
+                    for g in missing:
+                        if g in data:
+                            fresh[g] = _clean_price_map(data[g])
+                            if fresh[g]:
+                                _cache_put(("native", g), fresh[g])
+            except requests.RequestException:
+                pass
+        result: dict[str, dict[str, float]] = {}
+        for chain_id, gecko_id in NATIVE_COINGECKO_IDS.items():
+            if gecko_id not in gecko_ids:
+                continue
+            if gecko_id in fresh:
+                result[chain_id] = fresh[gecko_id]
+            else:
+                hit = _cache_get(("native", gecko_id), PRICE_TTL)
+                if hit is not _MISS:
+                    result[chain_id] = hit
+        return result
 
 
 def _fetch_token_prices(
@@ -135,36 +194,60 @@ def _fetch_token_prices(
         return {}
 
     prices: dict[str, dict[str, float]] = {}
-    contracts_list = list(contracts)
-    chunk_size = 50  # keep query strings/URLs reasonably sized
-    for i in range(0, len(contracts_list), chunk_size):
-        chunk = contracts_list[i : i + chunk_size]
-        try:
-            data = request_json(
-                "GET",
-                f"{COINGECKO_API}/simple/token_price/{platform}",
-                params={
-                    "contract_addresses": ",".join(chunk),
-                    "vs_currencies": "usd,eur",
-                },
-            )
-            if not isinstance(data, dict):
+
+    def _store(addr: str, clean: dict) -> None:
+        # Solana mints are case-sensitive base58: keep the exact key
+        # too, in addition to the lowercase one used for EVM.
+        prices[addr] = clean
+        prices[addr.lower()] = clean
+
+    with _kind_lock("token:" + chain_id):
+        todo = []
+        for c in contracts:
+            hit = _cache_get(("tok", chain_id, c), PRICE_TTL)
+            if hit is _MISS:
+                todo.append(c)
+            elif hit:
+                _store(c, hit)
+        chunk_size = 50  # keep query strings/URLs reasonably sized
+        for i in range(0, len(todo), chunk_size):
+            chunk = todo[i : i + chunk_size]
+            try:
+                data = request_json(
+                    "GET",
+                    f"{COINGECKO_API}/simple/token_price/{platform}",
+                    params={
+                        "contract_addresses": ",".join(chunk),
+                        "vs_currencies": "usd,eur",
+                    },
+                )
+                if not isinstance(data, dict):
+                    continue
+            except requests.RequestException:
                 continue
-        except requests.RequestException:
-            continue
-        for addr, vals in data.items():
-            if isinstance(addr, str):
-                clean = _clean_price_map(vals)
-                # Solana mints are case-sensitive base58: keep the exact key
-                # too, in addition to the lowercase one used for EVM.
-                prices[addr] = clean
-                prices[addr.lower()] = clean
+            for addr, vals in data.items():
+                if isinstance(addr, str):
+                    _store(addr, _clean_price_map(vals))
+            for c in chunk:  # also remember "not priced", so it is not re-asked
+                got = data.get(c) if c in data else data.get(c.lower())
+                _cache_put(("tok", chain_id, c), _clean_price_map(got) if got is not None else {})
     return prices
 
 
 def _fetch_usd_eur_rate() -> float | None:
     """USD -> EUR conversion rate, used to convert xExchange's USD-only
     token prices into EUR (MultiversX's /mex-tokens only gives USD)."""
+    with _kind_lock("fx"):
+        hit = _cache_get(("fx",), FX_TTL)
+        if hit is not _MISS:
+            return hit
+        rate = _fetch_usd_eur_rate_raw()
+        if rate is not None:
+            _cache_put(("fx",), rate)
+        return rate
+
+
+def _fetch_usd_eur_rate_raw() -> float | None:
     try:
         data = request_json("GET", f"{FX_API}/latest", params={"from": "USD", "to": "EUR"})
         rate = safe_price(data["rates"]["EUR"])
@@ -177,6 +260,17 @@ def _fetch_mex_tokens_prices() -> dict[str, float]:
     """Return {esdt_identifier: usd_price} for the "MEX economics" token
     set (those with a direct MEX/WEGLD pair), via MultiversX's /mex-tokens.
     Broad and cheap, but doesn't cover every token traded on xExchange."""
+    with _kind_lock("mex"):
+        hit = _cache_get(("mex",), MEX_TTL)
+        if hit is not _MISS:
+            return dict(hit)
+        prices = _fetch_mex_tokens_prices_raw()
+        if prices:
+            _cache_put(("mex",), dict(prices))
+        return prices
+
+
+def _fetch_mex_tokens_prices_raw() -> dict[str, float]:
     prices: dict[str, float] = {}
     page_size = 100
     for page in range(MAX_PAGES):
@@ -209,29 +303,40 @@ def _fetch_token_info(identifiers: set[str]) -> dict[str, dict]:
     if not identifiers:
         return {}
     info: dict[str, dict] = {}
-    ids_list = sorted(identifiers)
-    chunk_size = 50
-    for i in range(0, len(ids_list), chunk_size):
-        chunk = ids_list[i : i + chunk_size]
-        try:
-            batch = request_json(
-                "GET",
-                f"{MULTIVERSX_API}/tokens",
-                params={"identifiers": ",".join(chunk), "size": len(chunk)},
-            )
-            if not isinstance(batch, list):
+    with _kind_lock("tokinfo"):
+        todo = []
+        for ident in sorted(identifiers):
+            hit = _cache_get(("tokinfo", ident), MEX_TTL)
+            if hit is _MISS:
+                todo.append(ident)
+            elif hit is not None:      # None = "the API does not know it"
+                info[ident] = dict(hit)
+        chunk_size = 50
+        for i in range(0, len(todo), chunk_size):
+            chunk = todo[i : i + chunk_size]
+            try:
+                batch = request_json(
+                    "GET",
+                    f"{MULTIVERSX_API}/tokens",
+                    params={"identifiers": ",".join(chunk), "size": len(chunk)},
+                )
+                if not isinstance(batch, list):
+                    continue
+            except requests.RequestException:
                 continue
-        except requests.RequestException:
-            continue
-        for tok in batch:
-            if not isinstance(tok, dict):
-                continue
-            identifier = tok.get("identifier")
-            if isinstance(identifier, str):
-                info[identifier] = {
-                    "price": safe_price(tok.get("price")),
-                    "decimals": safe_decimals(tok.get("decimals")),
-                }
+            got: dict[str, dict] = {}
+            for tok in batch:
+                if not isinstance(tok, dict):
+                    continue
+                identifier = tok.get("identifier")
+                if isinstance(identifier, str):
+                    got[identifier] = {
+                        "price": safe_price(tok.get("price")),
+                        "decimals": safe_decimals(tok.get("decimals")),
+                    }
+            info.update(got)
+            for ident in chunk:
+                _cache_put(("tokinfo", ident), dict(got[ident]) if ident in got else None)
     return info
 
 
@@ -296,6 +401,27 @@ def _price_lp(tok: TokenBalance, lp: dict, usd_eur_rate: float | None) -> None:
     tok.name = f"{tok.name} · LP valorisé via {lp['adapter']}"[:300]
 
 
+def prefetch(chain_ids: set[str]) -> None:
+    """Warm the price cache in the background (fire and forget) while the
+    wallets are still being read: native prices, the FX rate and, when a
+    MultiversX wallet is involved, xExchange's price list. apply_pricing then
+    finds them ready. Never raises."""
+    chain_ids = set(chain_ids)
+
+    def _safe(fn, *args):
+        try:
+            fn(*args)
+        except Exception:  # noqa: BLE001 - purely an optimisation
+            pass
+
+    pool = ThreadPoolExecutor(max_workers=3)
+    pool.submit(_safe, _fetch_native_prices, chain_ids)
+    if "multiversx" in chain_ids:
+        pool.submit(_safe, _fetch_usd_eur_rate)
+        pool.submit(_safe, _fetch_mex_tokens_prices)
+    pool.shutdown(wait=False)
+
+
 def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
     """Mutate `results` in place, filling in usd_value/eur_value on every
     native balance and token/staking entry, plus each wallet's totals.
@@ -304,8 +430,9 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
     down / rate-limited): callers must then NOT hide "unpriced" lines, they
     are simply not priced yet."""
     LAST_NOTES.clear()
+    LAST_TIMINGS.clear()
+    t_start = time.monotonic()
     chain_ids = {w.chain for w in results if not w.error}
-    native_prices = _fetch_native_prices(chain_ids)
 
     contracts_by_chain: dict[str, set[str]] = {}
     multiversx_identifiers: set[str] = set()
@@ -319,23 +446,41 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
                         tok.contract.lower() if w.chain == "ethereum" else tok.contract
                     )
 
-    token_prices_by_chain = {
-        chain: _fetch_token_prices(chain, contracts)
-        for chain, contracts in contracts_by_chain.items()
-    }
+    # The three groups below talk to different hosts (CoinGecko, MultiversX's
+    # API, the FX service), each throttled on its own: they run side by side.
+    # Whatever prefetch() already fetched is served from the cache.
+    def _coingecko():
+        native = _fetch_native_prices(chain_ids)
+        by_chain = {
+            chain: _fetch_token_prices(chain, contracts)
+            for chain, contracts in contracts_by_chain.items()
+        }
+        return native, by_chain
 
-    # MultiversX ESDT/MetaESDT tokens: priced via xExchange (through
-    # MultiversX's own API). First a broad/cheap pass over the MEX-economics
-    # set, then a targeted pass for whatever's still missing a price.
+    def _xexchange():
+        # MultiversX ESDT/MetaESDT tokens: priced via xExchange (through
+        # MultiversX's own API). First a broad/cheap pass over the
+        # MEX-economics set, then a targeted pass for whatever's still
+        # missing a price.
+        prices = _fetch_mex_tokens_prices()
+        still_unpriced = multiversx_identifiers - prices.keys()
+        if still_unpriced:
+            prices.update(_fetch_token_prices_by_identifier(still_unpriced))
+        return prices
+
     xexchange_prices: dict[str, float] = {}
     usd_eur_rate: float | None = None
     lp_prices: dict[str, dict] = {}
-    if multiversx_identifiers:
-        xexchange_prices = _fetch_mex_tokens_prices()
-        still_unpriced = multiversx_identifiers - xexchange_prices.keys()
-        if still_unpriced:
-            xexchange_prices.update(_fetch_token_prices_by_identifier(still_unpriced))
-        usd_eur_rate = _fetch_usd_eur_rate()
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_cg = pool.submit(_coingecko)
+        f_mvx = pool.submit(_xexchange) if multiversx_identifiers else None
+        f_fx = pool.submit(_fetch_usd_eur_rate) if multiversx_identifiers else None
+        native_prices, token_prices_by_chain = f_cg.result()
+        if f_mvx is not None:
+            xexchange_prices = f_mvx.result()
+            usd_eur_rate = f_fx.result()
+    LAST_TIMINGS["prix"] = time.monotonic() - t_start
+    t_lp = time.monotonic()
 
     # LP tokens of other DEXs (AshSwap, JEX, OneDex...) have no public price:
     # value them from their pool's reserves, read straight from the contract.
@@ -364,6 +509,8 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
                     + (f" · {left} à traiter, relancez pour continuer" if left else "")
                     + (f" · {unknown} non reconnu(s)" if unknown > 0 else "")
                 )
+
+    LAST_TIMINGS["lp"] = time.monotonic() - t_lp
 
     for w in results:
         if w.error:

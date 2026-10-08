@@ -261,6 +261,9 @@ class ProviderTests(unittest.TestCase):
 
 
 class PricingTests(unittest.TestCase):
+    def setUp(self):
+        pricing.clear_cache()
+
     def test_hostile_prices(self):
         routes = {"simple/price": FakeResp({"ethereum": {"usd": "NaN", "eur": 1e30}})}
         with mock.patch("requests.request", router(routes)):

@@ -13,7 +13,7 @@ using the view names that answer here (see README, "LP tokens").
 
 from __future__ import annotations
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 

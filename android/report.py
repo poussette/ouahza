@@ -5,7 +5,7 @@ config format directly instead of pointing at a file on disk)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 
@@ -19,9 +19,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from typing import Callable
 
-from pricing import apply_pricing
+from pricing import apply_pricing, prefetch as _prefetch_prices
 from providers import PROVIDERS, detect_provider, get_provider_by_name
-from providers.base import WalletBalance
+from providers.base import TokenBalance, WalletBalance
 from providers.safe import (
     MAX_ENTRIES,
     MAX_LINE,
@@ -120,6 +120,21 @@ def resolve_wallet(label: str | None, forced_chain: str | None, address: str) ->
     return _finish(wallet, label)
 
 
+def start_price_prefetch(entries: list[tuple[str | None, str | None, str]]) -> None:
+    """Start fetching the prices that do not depend on the balances (native
+    coins, FX rate, xExchange list) while the wallets are being read."""
+    try:
+        chains = set()
+        for _label, chain, addr in entries:
+            cls = get_provider_by_name(chain) if chain else detect_provider(addr)
+            if cls is not None:
+                chains.add(cls.chain_id)
+        if chains:
+            _prefetch_prices(chains)
+    except Exception:  # noqa: BLE001 - purely an optimisation
+        pass
+
+
 def fetch_all(
     entries: list[tuple[str | None, str | None, str]],
     workers: int = 4,
@@ -140,6 +155,88 @@ def fetch_all(
             if on_progress:
                 on_progress(done, len(entries))
     return results
+
+
+# ------------------------------------------------- last report kept on the phone
+
+REPORT_FORMAT = 1
+MAX_REPORT_BYTES = 5_000_000
+
+
+def dump_results(results: list[WalletBalance], priced_ok: bool, saved_at: float) -> str:
+    return json.dumps({
+        "format": REPORT_FORMAT, "saved_at": saved_at, "priced_ok": bool(priced_ok),
+        "wallets": [asdict(w) for w in results],
+    })
+
+
+def _only_fields(cls, data: dict) -> dict:
+    names = cls.__dataclass_fields__
+    return {k: v for k, v in data.items() if k in names}
+
+
+def load_results(text: str):
+    """(results, priced_ok, saved_at) from dump_results(), or None when the
+    text is unusable (wrong format, damaged, too big): the app then simply
+    starts empty."""
+    try:
+        if len(text) > MAX_REPORT_BYTES:
+            return None
+        doc = json.loads(text)
+        if not isinstance(doc, dict) or doc.get("format") != REPORT_FORMAT:
+            return None
+        results = []
+        for raw in doc["wallets"]:
+            toks = [TokenBalance(**_only_fields(TokenBalance, t)) for t in raw.get("tokens", [])]
+            data = _only_fields(WalletBalance, {k: v for k, v in raw.items() if k != "tokens"})
+            w = WalletBalance(**data)
+            w.tokens = toks
+            sanitize_wallet(w)
+            results.append(w)
+        return results, bool(doc.get("priced_ok", True)), float(doc.get("saved_at", 0))
+    except Exception:  # noqa: BLE001 - a damaged file must never stop the app
+        return None
+
+
+def carry_prices(new: list[WalletBalance], old: list[WalletBalance]) -> bool:
+    """Value the freshly read balances with the unit prices of the previous
+    report, so the screen can show up-to-date amounts at once while the new
+    prices are still being fetched. True when at least one wallet was valued."""
+    prev = {(w.chain, w.address): w for w in old if not w.error}
+    carried = False
+    for w in new:
+        o = prev.get((w.chain, w.address))
+        if w.error or o is None:
+            continue
+        total_usd = total_eur = 0.0
+        any_price = False
+        if w.native_amount is not None and o.native_amount and o.native_usd_value is not None:
+            f = w.native_amount / o.native_amount
+            w.native_usd_value = o.native_usd_value * f
+            total_usd += w.native_usd_value
+            any_price = True
+            if o.native_eur_value is not None:
+                w.native_eur_value = o.native_eur_value * f
+                total_eur += w.native_eur_value
+        old_tokens = {}
+        for t in o.tokens:
+            if t.usd_value is not None and t.amount > 0:
+                old_tokens.setdefault((t.asset_type, t.contract or t.symbol), t)
+        for t in w.tokens:
+            ot = old_tokens.get((t.asset_type, t.contract or t.symbol))
+            if ot is None or not t.amount > 0:
+                continue
+            f = t.amount / ot.amount
+            t.usd_value = ot.usd_value * f
+            total_usd += t.usd_value
+            any_price = True
+            if ot.eur_value is not None:
+                t.eur_value = ot.eur_value * f
+                total_eur += t.eur_value
+        if any_price:
+            w.total_usd, w.total_eur = total_usd, total_eur
+            carried = True
+    return carried
 
 
 def filter_unpriced(results: list[WalletBalance]) -> None:

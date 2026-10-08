@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 
@@ -103,6 +103,39 @@ def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
 
+# ------------------------------------------------------------------ statistics
+# Per-host counters for the "where does the time go" line shown by the app:
+# number of requests, seconds spent waiting for the throttle slot, HTTP 429s.
+STATS: dict[str, dict[str, float]] = {}
+_stats_lock = threading.Lock()
+
+
+def reset_stats() -> None:
+    with _stats_lock:
+        STATS.clear()
+
+
+def _count(host: str, field: str, amount: float = 1) -> None:
+    with _stats_lock:
+        row = STATS.setdefault(host or "?", {"calls": 0, "wait": 0.0, "r429": 0})
+        row[field] = row.get(field, 0) + amount
+
+
+def stats_summary(max_hosts: int = 4) -> str:
+    """"api.multiversx.com 120 appels (attente 48 s, 3×429) · ..." (most used first)."""
+    with _stats_lock:
+        rows = sorted(STATS.items(), key=lambda kv: -kv[1]["calls"])[:max_hosts]
+        parts = []
+        for host, row in rows:
+            extra = []
+            if row["wait"] >= 0.5:
+                extra.append(f"attente {row['wait']:.0f} s")
+            if row["r429"]:
+                extra.append(f"{int(row['r429'])}×429")
+            parts.append(f"{host} {int(row['calls'])} appel(s)" + (f" ({', '.join(extra)})" if extra else ""))
+    return " · ".join(parts)
+
+
 def _throttle(url: str) -> None:
     if not THROTTLE_ENABLED:
         return
@@ -116,6 +149,7 @@ def _throttle(url: str) -> None:
         slot = max(now, _next_slot.get(host, 0.0))
         _next_slot[host] = slot + interval
     if slot > now:
+        _count(host, "wait", slot - now)
         _sleep(slot - now)
 
 
@@ -141,7 +175,11 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http):
                 stream=True, allow_redirects=False,
             )
         except requests.RequestException as exc:
+            _count(urlsplit(url).hostname or "", "calls")
             raise HttpError(redact(str(exc))) from None
+        _count(urlsplit(url).hostname or "", "calls")
+        if resp.status_code == 429:
+            _count(urlsplit(url).hostname or "", "r429")
         location = resp.headers.get("Location") if 300 <= resp.status_code < 400 else None
         if not location:
             return resp

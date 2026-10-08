@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 
@@ -60,7 +60,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.9"
+APP_VERSION = "0.1.10"
 
 
 def _version_problems() -> list[str]:
@@ -600,6 +600,11 @@ class OuahzaApp(App):
             color=MUTED, font_size=sp(12), padding=(dp(20), 0), min_height=dp(24),
         )
         root.add_widget(self.status_label)
+        # Durées de la dernière actualisation (où part le temps) : petite ligne discrète.
+        self.perf_label = WrapLabel(
+            text="", color=rgba(FAINT_HEX), font_size=sp(10), padding=(dp(20), 0),
+        )
+        root.add_widget(self.perf_label)
 
         # Barre figée : en-tête du wallet ouvert quand le sien a défilé hors écran.
         # Superposée à la liste (FloatLayout) : n'en change pas la taille, donc aucun saut.
@@ -709,9 +714,46 @@ class OuahzaApp(App):
         except Exception:
             pass
 
+    # ------------------------------------------------- dernier rapport conservé
+
+    def _report_path(self):
+        return os.path.join(self.user_data_dir, "last_report.json")
+
+    def _save_last_report(self, results, priced_ok):
+        try:
+            tmp = self._report_path() + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(report.dump_results(results, priced_ok, time.time()))
+            os.replace(tmp, self._report_path())
+        except Exception:  # noqa: BLE001 - never block the app for a cache
+            pass
+
+    def _load_last_report(self):
+        """Affiche tout de suite les dernières données enregistrées (avant toute requête)."""
+        if not self.settings.get("config_text", "").strip():
+            return
+        try:
+            with open(self._report_path(), encoding="utf-8") as f:
+                loaded = report.load_results(f.read())
+        except Exception:  # noqa: BLE001
+            return
+        if not loaded or not loaded[0]:
+            return
+        results, priced_ok, saved_at = loaded
+        self.priced_ok = priced_ok
+        text_results = results
+        if priced_ok:
+            import copy
+            text_results = copy.deepcopy(results)
+            report.filter_unpriced(text_results)
+            report.filter_dust(text_results)
+        self._finish(results, report.format_table(text_results), None, priced_ok, [],
+                     stamp=saved_at, from_disk=True)
+
     # ----------------------------------------------------------------- updates
 
     def on_start(self):
+        self._load_last_report()
         if self.settings.get("check_updates", True):
             Clock.schedule_once(lambda dt: self.check_update(manual=False), 2.0)
 
@@ -1060,10 +1102,25 @@ class OuahzaApp(App):
                     lambda dt: setattr(self.status_label, "text", f"{done} / {total} wallet(s) traité(s)...")
                 )
 
+            from providers import net as _net
+            _net.reset_stats()
+            t0 = time.monotonic()
+            # Prix qui ne dépendent pas des soldes : demandés pendant la lecture des wallets.
+            report.start_price_prefetch(entries)
             results = report.fetch_all(entries, workers=4, on_progress=progress)
+            t_wallets = time.monotonic() - t0
+
+            # Montants à jour affichés tout de suite, valorisés avec les derniers prix connus.
+            previous = self.last_results
+            if previous:
+                import copy
+                partial = copy.deepcopy(results)
+                if report.carry_prices(partial, previous):
+                    Clock.schedule_once(lambda dt: self._show_partial(partial))
 
             priced_ok = True
             notes = []
+            timings = {}
             try:
                 import pricing as _pricing
                 from providers import lp as _lp
@@ -1075,8 +1132,16 @@ class OuahzaApp(App):
 
                 priced_ok = _pricing.apply_pricing(results, on_progress=_lp_progress) is not False
                 notes = [clean_text(n, 120) for n in _pricing.LAST_NOTES]
+                timings = dict(_pricing.LAST_TIMINGS)
             except Exception:
                 priced_ok = False  # offline / pricing down: keep raw balances
+            perf = (
+                f"Durées : wallets {t_wallets:.0f} s · prix {timings.get('prix', 0):.0f} s"
+                f" · LP {timings.get('lp', 0):.0f} s · total {time.monotonic() - t0:.0f} s"
+            )
+            stats = _net.stats_summary()
+            if stats:
+                perf += "\n" + stats
 
             # Les positions sans valeur / < 1 centime sont masquées à l'affichage
             # (avec bouton pour les voir) ; l'export texte suit le même défaut.
@@ -1088,13 +1153,25 @@ class OuahzaApp(App):
                 report.filter_unpriced(text_results)
                 report.filter_dust(text_results)
             text = report.format_table(text_results)
-            Clock.schedule_once(lambda dt: self._finish(results, text, None, priced_ok, notes))
+            self._save_last_report(results, priced_ok)
+            Clock.schedule_once(lambda dt: self._finish(results, text, None, priced_ok, notes, perf=perf))
         except Exception as exc:
             # Never show a raw traceback: it can embed URLs with API keys.
             err = safe_error(exc) or exc.__class__.__name__
             Clock.schedule_once(lambda dt: self._finish(None, None, err, True, []))
 
-    def _finish(self, results, text, error, priced_ok, notes=()):
+    def _show_partial(self, partial):
+        """Soldes frais + derniers prix connus, le temps que les nouveaux prix arrivent."""
+        if not self.running:
+            return
+        self.priced_ok = True
+        self.results_box.clear_widgets()
+        try:
+            self.render_results(partial)
+        except Exception:  # noqa: BLE001 - the final render replaces it anyway
+            pass
+
+    def _finish(self, results, text, error, priced_ok, notes=(), stamp=None, from_disk=False, perf=""):
         self.running = False
         self.run_btn.disabled = False
         self.run_btn.text = "Actualiser"
@@ -1113,7 +1190,11 @@ class OuahzaApp(App):
             self.results_box.add_widget(WrapLabel(
                 text=f"[color={RED_HEX}]{esc(safe_error(exc))}[/color]", markup=True, font_size=sp(11),
             ))
-        msg = f"Mis à jour le {time.strftime('%d/%m/%Y à %H:%M')} · {len(results)} wallet(s)"
+        when = time.strftime('%d/%m/%Y à %H:%M', time.localtime(stamp)) if stamp else time.strftime('%d/%m/%Y à %H:%M')
+        msg = f"Mis à jour le {when} · {len(results)} wallet(s)"
+        if from_disk:
+            msg += " · dernières données enregistrées, appuie sur Actualiser"
+        self.perf_label.text = perf if not from_disk else self.perf_label.text
         if not priced_ok:
             msg += " · prix indisponibles, soldes bruts affichés"
         for note in notes:

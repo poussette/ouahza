@@ -1,1 +1,1 @@
-v0.1.9: 4e release blanche pour test d'update in-app.
+v0.1.10: Amélioration de l'actualisation plus rapide : prix mis en cache, chargement en parallèle, dernier rapport affiché au lancement ; ligne de durées.

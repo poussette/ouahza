@@ -490,6 +490,7 @@ class DiscoveryTests(unittest.TestCase):
 
 class PricingIntegration(unittest.TestCase):
     def setUp(self):
+        pricing.clear_cache()
         lp.set_cache_path(None)
 
     def test_apply_pricing_values_lp_token(self):
