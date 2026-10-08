@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.jks
+secrets.txt
+# copies générées par le workflow / tools/sync_core.sh
+android/providers/
+android/pricing.py
+android/bin/
+android/.buildozer/
+dist/

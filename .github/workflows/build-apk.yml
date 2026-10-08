@@ -1,0 +1,198 @@
+name: Build Ouahza APK
+
+on:
+  push:
+  workflow_dispatch:
+
+# Least privilege: the workflow only needs to read the repository.
+permissions:
+  contents: read
+
+# A newer push supersedes a running build of the same ref.
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install requests
+      - run: python -m unittest discover -s cli/tests
+
+  build:
+    needs: test
+    name: build (${{ matrix.name }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false   # one variant failing must not cancel the other
+      matrix:
+        include:
+          # One APK that installs on virtually every phone (32 + 64 bit)...
+          - name: universal
+            archs: "arm64-v8a,armeabi-v7a"
+          # ...and a lighter one for modern 64-bit phones only.
+          - name: arm64
+            archs: "arm64-v8a"
+    defaults:
+      run:
+        working-directory: android   # buildozer.spec et main.py de l'app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false   # the build never needs to push
+
+      # Le code partagé (core/) est copié à côté de l'app avant la compilation.
+      - name: Copy shared code into the app
+        working-directory: .
+        run: |
+          cp -r core/providers android/providers
+          cp core/pricing.py android/pricing.py
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git zip unzip autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake \
+            libffi-dev libssl-dev
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          pip install buildozer==1.6.0 Cython==0.29.33 virtualenv
+
+      # python-for-android's current "master" builds Python 3.14 and its build
+      # venv ends up with a broken pip (ImportError in `pip install -U pip`).
+      # Pin the last well-tested release instead (builds Python 3.11).
+      - name: Pin python-for-android v2024.01.21
+        run: |
+          git clone --depth 1 --branch v2024.01.21 \
+            https://github.com/kivy/python-for-android.git "$HOME/p4a"
+          # Download OpenSSL 1.1.1w from its GitHub release (stable URL)
+          # instead of openssl.org's source/ directory.
+          sed -i 's#https://www.openssl.org/source/openssl-{url_version}.tar.gz#https://github.com/openssl/openssl/releases/download/OpenSSL_1_1_1w/openssl-{url_version}.tar.gz#' \
+            "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py"
+          grep -n "url = " "$HOME/p4a/pythonforandroid/recipes/openssl/__init__.py"
+          # Tell Buildozer to use this checkout (CI-only, not stored in the repo).
+          sed -i "/^\[app\]/a p4a.source_dir = $HOME/p4a" buildozer.spec
+          head -3 buildozer.spec
+
+      - name: Select ABIs for this variant (${{ matrix.name }})
+        run: |
+          sed -i "s/^android.archs = .*/android.archs = ${{ matrix.archs }}/" buildozer.spec
+          grep -n "^android.archs" buildozer.spec
+
+      # SDK/NDK downloads (~1-2 GB) are the slow part; keep them between runs.
+      - name: Cache Android SDK/NDK
+        uses: actions/cache@v4
+        with:
+          path: ~/.buildozer
+          key: buildozer-${{ runner.os }}-p4a2024-${{ matrix.name }}-${{ hashFiles('android/buildozer.spec') }}
+
+      - name: Build APK
+        shell: bash   # bash -eo pipefail: a buildozer failure fails the step
+        run: buildozer -v android debug 2>&1 | tee build.log
+
+      - name: Show the end of the log (on failure)
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== last 100 lines, compiler/environment noise filtered out ==="
+          sed 's/\x1b\[[0-9;]*m//g' build.log \
+            | grep -v -E '(/usr/bin/install|rm -f|Compiling |clang|gcc |llvm-ar|^\[DEBUG\]:\s+\./|^#\s+[A-Za-z_0-9]+ = )' \
+            | tail -n 100 | cut -c1-300
+
+      - name: Upload full build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.name }}
+          path: android/build.log
+          retention-days: 7
+
+      # Signature stable : sans elle, chaque build est signé par une clé de debug
+      # différente et Android refuse l'installation par-dessus la version
+      # précédente (d'où la désinstallation + perte des paramètres).
+      - name: Sign APK with the persistent key
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          VERSION=$(grep -E '^version *=' android/buildozer.spec | head -1 | sed 's/.*= *//' | tr -d ' \r')
+          mkdir -p dist
+          SRC=$(ls bin/*.apk | head -1)
+          OUT="dist/Ouahza-${VERSION}-${{ matrix.name }}.apk"
+          if [ -z "$KS_B64" ]; then
+            echo "::warning::Secrets ANDROID_KEYSTORE_* absents : APK signé avec la clé de debug jetable (pas de mise à jour par-dessus, pas de Release). Voir tools/make_keystore.sh."
+            cp "$SRC" "$OUT"
+            echo unsigned > dist/UNSIGNED
+            exit 0
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          APKSIGNER=$(ls "$HOME"/.buildozer/android/platform/android-sdk/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" sign --ks "$RUNNER_TEMP/release.jks" --ks-key-alias "$KS_ALIAS" \
+            --ks-pass env:KS_PASS --key-pass env:KS_PASS --out "$OUT" "$SRC"
+          "$APKSIGNER" verify --print-certs "$OUT" | head -3
+          rm -f "$RUNNER_TEMP/release.jks"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ouahza-apk-${{ matrix.name }}
+          path: android/dist/*
+          retention-days: 30
+
+  # Publie chaque version dans "Releases" : c'est ce que l'app interroge au lancement.
+  release:
+    name: publish release
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ouahza-apk-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f dist/UNSIGNED ]; then
+            echo "::warning::APK non signé avec la clé persistante : pas de Release publiée."
+            exit 0
+          fi
+          VERSION=$(grep -E '^version *=' android/buildozer.spec | head -1 | sed 's/.*= *//' | tr -d ' \r')
+          TAG="v${VERSION}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/*.apk --clobber
+          else
+            if [ -f android/release_notes.txt ]; then NOTES=(--notes-file android/release_notes.txt); else NOTES=(--notes "Ouahza ${VERSION}"); fi
+            gh release create "$TAG" dist/*.apk --title "Ouahza ${VERSION}" "${NOTES[@]}" --target "$GITHUB_SHA" --latest
+          fi

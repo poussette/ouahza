@@ -1,0 +1,1 @@
+Première version d'Ouahza : suivi multi-chaînes, valorisation des LP tokens via les contrats, en-têtes épinglés, mise à jour intégrée.

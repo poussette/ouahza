@@ -1,0 +1,27 @@
+# Une adresse par ligne. Le format "chain,adresse" force la blockchain ;
+# sans chain, elle est auto-détectée d'après le format de l'adresse.
+# Les lignes vides ou commençant par # sont ignorées.
+#
+# Une ligne [Label] regroupe toutes les adresses qui suivent sous ce nom :
+# chaque wallet reste valorisé individuellement, mais leurs totaux sont
+# aussi additionnés dans un total combiné par label (affiché après le
+# rapport par wallet, et exporté en JSON/CSV). Le même label peut
+# réapparaître plus loin dans le fichier pour ajouter d'autres adresses au
+# groupe déjà commencé.
+
+[Perso]
+bitcoin,bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
+ethereum,0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045
+solana,7VfCXTUXx5WJV5JADk17DUJ4ksgau7utNKj4b963voxs
+
+[Trading]
+erd1qyu5wthldzr8wx5c9ucg8kjagg0jfs53s8nr3zpz3hypefsdd8ssycr6th
+solana,8R8e6HF3trUUUqew2VUx7P1QAa2xCcY3fqPHL23b1ntZ
+
+# On peut revenir sur un label déjà commencé pour lui ajouter une adresse :
+[Perso]
+ethereum,0xdD640044a0B94245949070ac306f24055E9BA487
+
+# Une adresse listée sans label précédent reste non groupée (valorisée
+# individuellement, mais sans entrer dans un total combiné) :
+bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh
