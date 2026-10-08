@@ -1,1 +1,1 @@
-v0.1.8: patch pour régler le problème de téléchargement d'update et de son auto-install.
+v0.1.9: 4e release blanche pour test d'update in-app.
