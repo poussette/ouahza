@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 
 
@@ -60,7 +60,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.5"
+APP_VERSION = "0.1.6"
 
 
 def _version_problems() -> list[str]:
@@ -743,6 +743,32 @@ class OuahzaApp(App):
             return
         self._offer_update(info)
 
+    def _download_apk(self, info) -> bool:
+        """Download the APK with Android's DownloadManager: progress and a
+        "download complete" notification belong to the system (no browser tab);
+        tapping that notification opens the installer. False -> use the browser."""
+        url = info["url"]
+        if platform != "android" or not url.startswith("https://github.com/") or not url.endswith(".apk"):
+            return False
+        try:
+            from jnius import autoclass
+            Context = autoclass("android.content.Context")
+            Uri = autoclass("android.net.Uri")
+            Request = autoclass("android.app.DownloadManager$Request")
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            dm = activity.getSystemService(Context.DOWNLOAD_SERVICE)
+            name = "Ouahza-" + re.sub(r"[^0-9.]", "", info["version"]) + ".apk"
+            req = Request(Uri.parse(url))
+            req.setTitle("Ouahza " + info["version"])
+            req.setDescription("Mise à jour : touche cette notification une fois terminé")
+            req.setMimeType("application/vnd.android.package-archive")
+            req.setNotificationVisibility(Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            req.setDestinationInExternalFilesDir(activity, "Download", name)
+            dm.enqueue(req)
+            return True
+        except Exception:  # noqa: BLE001 - fall back to the browser
+            return False
+
     def _open_url(self, url: str) -> None:
         """Hand the release link to the system (browser/download manager)."""
         if not url.startswith("https://github.com/"):
@@ -787,8 +813,14 @@ class OuahzaApp(App):
 
         def do_go(_b):
             popup.dismiss()
-            self._open_url(info["url"])
-            self.status_label.text = "Téléchargement ouvert : lance le fichier .apk téléchargé pour installer."
+            if self._download_apk(info):
+                self.status_label.text = (
+                    "Téléchargement lancé : quand la notification « Téléchargement terminé » "
+                    "apparaît, touche-la pour installer."
+                )
+            else:
+                self._open_url(info["url"])
+                self.status_label.text = "Téléchargement ouvert : lance le fichier .apk téléchargé pour installer."
         later.bind(on_release=lambda _b: popup.dismiss())
         skip.bind(on_release=do_skip)
         go.bind(on_release=do_go)

@@ -1,1 +1,1 @@
-v0.1.5: version de retest d'update in app au lancement.
+v0.1.6: patch téléchargement de l'update par le gestionnaire Android avec notification plutot que par le navigateur web
