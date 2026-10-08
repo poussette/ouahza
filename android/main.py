@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.3"
+__version__ = "0.1.0"
 
 
 
@@ -60,7 +60,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.3"
+APP_VERSION = "0.1.0"
 
 
 def _version_problems() -> list[str]:
@@ -76,6 +76,31 @@ def _version_problems() -> list[str]:
 
 VERSION_PROBLEMS = _version_problems()
 SETTINGS_FILENAME = "ouahza_settings.json"
+
+# "universal" or "arm64": written by the build (build_variant.py) so the update
+# check offers the APK of the same variant as the installed one.
+try:
+    from build_variant import VARIANT as BUILD_VARIANT
+except Exception:  # noqa: BLE001 - running from source
+    BUILD_VARIANT = "universal"
+
+
+def detect_variant() -> str:
+    """Variant of the installed APK. The truth is read from the APK itself (its
+    native-library folders); the build-time stamp is only a fallback."""
+    if platform == "android":
+        try:
+            import zipfile
+            from jnius import autoclass
+            from providers import updater
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            with zipfile.ZipFile(activity.getApplicationInfo().sourceDir) as z:
+                found = updater.variant_from_apk_entries(z.namelist())
+            if found:
+                return found
+        except Exception:  # noqa: BLE001
+            pass
+    return BUILD_VARIANT
 
 # Monospace font shipped with Kivy (used for the config editor).
 try:
@@ -699,7 +724,7 @@ class OuahzaApp(App):
             info = err = None
             try:
                 from providers import updater
-                info = updater.check(APP_VERSION)
+                info = updater.check(APP_VERSION, variant=detect_variant())
             except Exception as exc:  # noqa: BLE001 - offline/rate limit: stay silent unless asked
                 err = safe_error(exc) or exc.__class__.__name__
             Clock.schedule_once(lambda dt: self._update_result(info, err, manual))
@@ -739,7 +764,7 @@ class OuahzaApp(App):
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
         notes = info.get("notes") or ""
         text = (
-            f"[b]Version {esc(info['version'])}[/b] disponible (installée : {esc(APP_VERSION)}).\n\n"
+            f"[b]Version {esc(info['version'])}[/b] disponible (installée : {esc(APP_VERSION)}, variante {esc(detect_variant())}).\n\n"
             + (f"{esc(notes)}\n\n" if notes else "")
             + f"[color={MUTED_HEX}]Tes paramètres sont conservés : Android installe la mise à jour "
             "par-dessus l'app actuelle (ne la désinstalle pas).[/color]"

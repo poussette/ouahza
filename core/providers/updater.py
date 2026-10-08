@@ -10,7 +10,7 @@ and an update over the installed app keeps its private data/settings).
 
 from __future__ import annotations
 
-__version__ = "0.1.3"
+__version__ = "0.1.0"
 
 import re
 
@@ -35,10 +35,30 @@ def valid_repo(repo) -> bool:
     return isinstance(repo, str) and bool(_REPO_RE.fullmatch(repo)) and ".." not in repo
 
 
-def _pick_asset(assets, repo: str) -> str | None:
-    """Link of the APK to offer: the universal build first (it keeps the same
-    version-code scheme as an installed universal APK), else any .apk. Only
-    links on this repository's github.com release pages are accepted."""
+VARIANTS = ("universal", "arm64")
+
+
+def variant_from_apk_entries(names) -> str | None:
+    """Which build is installed, from the entry names inside its APK: the arm64
+    build only ships lib/arm64-v8a/, the universal one also ships lib/armeabi-v7a/.
+    None when it cannot be told."""
+    names = list(names)
+    has64 = any(n.startswith("lib/arm64-v8a/") for n in names)
+    has32 = any(n.startswith("lib/armeabi-v7a/") for n in names)
+    if has64 and not has32:
+        return "arm64"
+    if has32:
+        return "universal"
+    return None
+
+
+def _pick_asset(assets, repo: str, variant: str = "universal") -> str | None:
+    """Link of the APK of the *same variant* as the installed app (an arm64 APK
+    must be updated by an arm64 APK: the two builds use different version-code
+    schemes). Only links on this repository's github.com release pages are
+    accepted; None when the release has no APK of that variant."""
+    if variant not in VARIANTS:
+        variant = "universal"
     prefix = f"https://github.com/{repo}/releases/download/"
     apks = []
     for a in assets if isinstance(assets, list) else []:
@@ -49,12 +69,12 @@ def _pick_asset(assets, repo: str) -> str | None:
                 and name.lower().endswith(".apk") and url.startswith(prefix)):
             apks.append((name.lower(), url))
     for name, url in apks:
-        if "universal" in name:
+        if name.endswith(f"-{variant}.apk"):
             return url
-    return apks[0][1] if apks else None
+    return None
 
 
-def check(current: str, repo: str = DEFAULT_REPO) -> dict | None:
+def check(current: str, repo: str = DEFAULT_REPO, variant: str = "universal") -> dict | None:
     """Return {"version", "url", "page", "notes"} when a release newer than
     `current` exists, else None. Raises net.HttpError on network problems."""
     cur = parse_version(current)
@@ -69,7 +89,7 @@ def check(current: str, repo: str = DEFAULT_REPO) -> dict | None:
     if latest is None or latest <= cur:
         return None
     page = f"https://github.com/{repo}/releases/tag/{data['tag_name'].strip()}"
-    url = _pick_asset(data.get("assets"), repo) or page
+    url = _pick_asset(data.get("assets"), repo, variant) or page
     return {
         "version": ".".join(map(str, latest)),
         "url": url,
