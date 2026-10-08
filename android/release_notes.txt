@@ -1,1 +1,1 @@
-v0.1.1: version de test de mise à jour in app.
+v0.1.2: mise à jour pour proposer l'update correspondant à la variante courante arm64 ou universal installée.
