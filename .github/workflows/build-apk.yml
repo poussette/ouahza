@@ -137,7 +137,7 @@ jobs:
           KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KS_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          VERSION=$(grep -E '^version *=' android/buildozer.spec | head -1 | sed 's/.*= *//' | tr -d ' \r')
+          VERSION=$(grep -E '^version *=' buildozer.spec | head -1 | sed 's/.*= *//' | tr -d ' \r')
           mkdir -p dist
           SRC=$(ls bin/*.apk | head -1)
           OUT="dist/Ouahza-${VERSION}-${{ matrix.name }}.apk"
