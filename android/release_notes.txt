@@ -1,1 +1,1 @@
-v0.1.6: patch téléchargement de l'update par le gestionnaire Android avec notification plutot que par le navigateur web
+v0.1.7: 3e release pour test d'update in app.
