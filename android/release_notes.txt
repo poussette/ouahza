@@ -1,1 +1,1 @@
-v0.1.13: Actualisation automatique au lancement ; pools LP mémorisés entre deux lancements ; ralentissement automatique en cas de limite de débit.
+v0.1.14: Valorisation LP en parallèle ; animation de chargement.

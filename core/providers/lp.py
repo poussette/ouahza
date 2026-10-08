@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.13"
+__version__ = "0.1.14"
 
 
 
@@ -42,7 +42,9 @@ import json
 import math
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from urllib.parse import quote
 
@@ -57,6 +59,7 @@ MVX_API = "https://api.multiversx.com"
 #: hard budgets per run, so a hostile/unknown contract cannot cost minutes.
 MAX_LP_TOKENS = 80
 MAX_PASSES = 3                # a new budget per pass, same run
+LP_WORKERS = 2                # LP tokens examined side by side (gateway and API are throttled separately)
 FAIL_TTL = 86400              # seconds an unrecognised LP is skipped
 MAX_CACHE_ENTRIES = 2000
 MAX_CACHE_BYTES = 500_000
@@ -170,6 +173,9 @@ PROBE_NAMES = [
 
 # ------------------------------------------------------------------- low level
 
+_budget_lock = threading.RLock()
+
+
 class Budget:
     """Call budget (optionally nested under a parent) plus a wall-clock deadline."""
 
@@ -180,12 +186,13 @@ class Budget:
         self.deadline = deadline if deadline is not None else time.monotonic() + DEADLINE_SECONDS
 
     def spend(self) -> bool:
-        if self.calls <= 0 or time.monotonic() > self.deadline:
-            return False
-        if self.parent is not None and not self.parent.spend():
-            return False
-        self.calls -= 1
-        return True
+        with _budget_lock:      # several LP tokens are examined at once
+            if self.calls <= 0 or time.monotonic() > self.deadline:
+                return False
+            if self.parent is not None and not self.parent.spend():
+                return False
+            self.calls -= 1
+            return True
 
 
 def _find_return(doc, depth: int = 0):
@@ -949,33 +956,40 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
             break
         budget = Budget()
         cache: dict = {}
-        remaining: list[str] = []
-        for i, lp in enumerate(todo):
+
+        def work(lp):
             if _global_exhausted(budget):
-                remaining = todo[i:]
-                break
-            transient = False
-            res = None
+                return "retry", None           # cut off: redo it first next pass
             try:
-                res = discover_pool(lp, budget, cache)
+                return "ok", discover_pool(lp, budget, cache)
             except Exception:  # noqa: BLE001 - hostile data must never abort the run
-                transient = True
-            if transient:
-                if _global_exhausted(budget):
-                    remaining = todo[i:]  # this LP was cut off: redo it first next pass
-                    break
-                remaining.append(lp)      # outage / rate limit: try again next pass
+                return "retry", None           # outage / rate limit: try again next pass
+
+        results: list = [None] * len(todo)
+        ok_in_pass = 0
+        base = total - len(todo)
+        with ThreadPoolExecutor(max_workers=max(1, LP_WORKERS)) as pool:
+            futures = {pool.submit(work, lp): i for i, lp in enumerate(todo)}
+            for fut in as_completed(futures):
+                results[futures[fut]] = fut.result()
+                if results[futures[fut]][0] == "ok":
+                    ok_in_pass += 1
+                    if on_progress:
+                        try:
+                            on_progress(base + ok_in_pass, total,
+                                        len(found) + sum(1 for r in results if r and r[0] == "ok" and r[1]))
+                        except Exception:  # noqa: BLE001
+                            pass
+        remaining: list[str] = []
+        for lp, (kind, res) in zip(todo, results):
+            if kind != "ok":
+                remaining.append(lp)
+                continue
+            stats["examined"] += 1
+            if res:
+                found.append((lp, res[0], res[1]))
             else:
-                stats["examined"] += 1
-                if res:
-                    found.append((lp, res[0], res[1]))
-                else:
-                    lc.put_fail(lp)
-            if on_progress:
-                try:
-                    on_progress(total - len(todo) + i + 1 - len(remaining), total, len(found))
-                except Exception:  # noqa: BLE001
-                    pass
+                lc.put_fail(lp)
         lc.save()
         todo = remaining
     stats["remaining"] = len(todo)

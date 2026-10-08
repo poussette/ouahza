@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.13"
+__version__ = "0.1.14"
 
 
 
@@ -38,6 +38,7 @@ try:
 except Exception:
     pass
 
+from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.clipboard import Clipboard
@@ -60,7 +61,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.13"
+APP_VERSION = "0.1.14"
 
 
 def _version_problems() -> list[str]:
@@ -387,6 +388,59 @@ class Dot(Widget):
             Ellipse(pos=self.pos, size=self.size)
 
 
+class BusyBar(Widget):
+    """Fine barre de chargement indéterminée : un segment lumineux glisse sur un rail,
+    en douceur (accélère puis ralentit). Invisible quand l'app est au repos."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("size_hint", (1, None))
+        kwargs.setdefault("height", dp(4))
+        super().__init__(**kwargs)
+        self.opacity = 0
+        self._t = 0.0
+        self._ev = None
+        with self.canvas:
+            Color(*SURFACE2)
+            self._track = RoundedRectangle(radius=[dp(2)])
+            Color(*ACCENT)
+            self._seg = RoundedRectangle(radius=[dp(2)])
+        self.bind(pos=self._draw, size=self._draw)
+
+    @staticmethod
+    def _ease(t):  # smoothstep
+        return t * t * (3 - 2 * t)
+
+    def _draw(self, *_):
+        w = self.width
+        seg = w * 0.34
+        x = self.x - seg + self._ease(self._t) * (w + seg)
+        left, right = max(x, self.x), min(x + seg, self.x + w)
+        self._track.pos, self._track.size = self.pos, self.size
+        self._seg.pos = (left, self.y)
+        self._seg.size = (max(0.0, right - left), self.height)
+
+    def _tick(self, dt):
+        self._t = (self._t + dt / 1.5) % 1.0
+        self._draw()
+
+    def start(self):
+        if self._ev is None:
+            self._ev = Clock.schedule_interval(self._tick, 1 / 30)
+        Animation.cancel_all(self, "opacity")
+        Animation(opacity=1, d=0.25).start(self)
+
+    def stop(self):
+        Animation.cancel_all(self, "opacity")
+        anim = Animation(opacity=0, d=0.4)
+
+        def done(*_):
+            if self._ev is not None and self.opacity == 0:
+                self._ev.cancel()
+                self._ev = None
+        anim.bind(on_complete=done)
+        anim.start(self)
+
+
 class Chevron(Widget):
     open = BooleanProperty(False)
 
@@ -594,6 +648,13 @@ class OuahzaApp(App):
         settings_btn.bind(on_release=self.open_settings)
         top_bar.add_widget(settings_btn)
         root.add_widget(top_bar)
+
+        busy_row = BoxLayout(size_hint=(1, None), height=dp(4), padding=(dp(20), 0, dp(20), 0))
+        self.busy = BusyBar()
+        busy_row.add_widget(self.busy)
+        root.add_widget(busy_row)
+        self._busy_n = 0
+        self._busy_ev = None
 
         self.status_label = WrapLabel(
             text="Ouvre Paramètres pour coller ta liste d'adresses, puis appuie sur Actualiser.",
@@ -1090,11 +1151,31 @@ class OuahzaApp(App):
 
         self.running = True
         self.run_btn.disabled = True
-        self.run_btn.text = "Chargement..."
+        self.run_btn.text = "Chargement   "
         self.export_btn.disabled = True
         self.status_label.text = f"0 / {len(entries)} wallet(s) traité(s)..."
+        self._busy_start()
 
         threading.Thread(target=self._run_worker, args=(entries,), daemon=True).start()
+
+    def _busy_start(self):
+        """Barre qui glisse + points qui s'animent sur le bouton, tant que ça travaille."""
+        self.busy.start()
+        self._busy_n = 0
+        if self._busy_ev is None:
+            self._busy_ev = Clock.schedule_interval(self._busy_tick, 0.4)
+
+    def _busy_tick(self, _dt):
+        if not self.running:
+            return
+        self._busy_n = (self._busy_n + 1) % 4
+        self.run_btn.text = "Chargement" + "." * self._busy_n + " " * (3 - self._busy_n)
+
+    def _busy_stop(self):
+        self.busy.stop()
+        if self._busy_ev is not None:
+            self._busy_ev.cancel()
+            self._busy_ev = None
 
     def _run_worker(self, entries):
         try:
@@ -1180,6 +1261,7 @@ class OuahzaApp(App):
 
     def _finish(self, results, text, error, priced_ok, notes=(), stamp=None, from_disk=False, perf=""):
         self.running = False
+        self._busy_stop()
         self.run_btn.disabled = False
         self.run_btn.text = "Actualiser"
         self.results_box.clear_widgets()

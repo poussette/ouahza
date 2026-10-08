@@ -166,5 +166,73 @@ class LPCacheTests(unittest.TestCase):
         self.assertFalse(lp._PRICES)
 
 
+class ParallelTests(unittest.TestCase):
+    def setUp(self):
+        lp.set_cache_path(None)
+
+    def test_budget_is_thread_safe(self):
+        import threading
+        b = lp.Budget(1000)
+        got = []
+
+        def spend():
+            n = 0
+            while b.spend():
+                n += 1
+            got.append(n)
+        threads = [threading.Thread(target=spend) for _ in range(8)]
+        [t.start() for t in threads]
+        [t.join() for t in threads]
+        self.assertEqual(sum(got), 1000)          # never over- or under-spent
+
+    def test_two_lp_tokens_are_examined_side_by_side(self):
+        import threading
+        import time as _t
+        ids = ["AAA-111111", "BBB-222222", "CCC-333333", "DDD-444444"]
+        live = [0]
+        peak = [0]
+        guard = threading.Lock()
+
+        def fake_discover(lpid, budget, cache):
+            with guard:
+                live[0] += 1
+                peak[0] = max(peak[0], live[0])
+            _t.sleep(0.05)
+            with guard:
+                live[0] -= 1
+            return None                           # "unreadable": cached as failed, no value
+        with mock.patch.object(lp, "discover_pool", fake_discover), \
+                mock.patch.object(lp, "prefetch_token_facts", lambda l: None):
+            out = lp.price_lp_tokens(ids, fetch)
+        self.assertEqual(out, {})
+        self.assertEqual(peak[0], lp.LP_WORKERS)
+        self.assertEqual(lp.LAST_STATS["examined"], 4)
+
+    def test_failed_ones_are_retried_in_next_pass_and_order_kept(self):
+        ids = ["AAA-111111", "BBB-222222", "CCC-333333"]
+        seen = []
+
+        def flaky(lpid, budget, cache):
+            seen.append(lpid)
+            if lpid == "BBB-222222" and seen.count(lpid) == 1:
+                raise RuntimeError("rate limited")
+            return None
+        with mock.patch.object(lp, "discover_pool", flaky), \
+                mock.patch.object(lp, "prefetch_token_facts", lambda l: None):
+            lp.price_lp_tokens(ids, fetch)
+        self.assertEqual(seen.count("BBB-222222"), 2)
+        self.assertEqual(lp.LAST_STATS["examined"], 3)
+        self.assertEqual(lp.LAST_STATS["remaining"], 0)
+
+    def test_progress_reports_only_finished_ones(self):
+        ids = ["AAA-111111", "BBB-222222"]
+        seen = []
+        with mock.patch.object(lp, "discover_pool", lambda l, b, c: None), \
+                mock.patch.object(lp, "prefetch_token_facts", lambda l: None):
+            lp.price_lp_tokens(ids, fetch, on_progress=lambda *a: seen.append(a))
+        self.assertEqual(sorted(x[0] for x in seen), [1, 2])
+        self.assertTrue(all(x[1] == 2 for x in seen))
+
+
 if __name__ == "__main__":
     unittest.main()
