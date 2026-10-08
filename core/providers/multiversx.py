@@ -35,14 +35,18 @@ delegation contract, not the wallet, so it's covered too:
 
 from __future__ import annotations
 
-__version__ = "0.1.14"
+__version__ = "0.1.15"
 
 
 
 
 
 
+import json
+import os
 import re
+import threading
+import time
 from urllib.parse import quote
 
 import requests
@@ -57,6 +61,101 @@ PAGE_SIZE = 100  # max allowed by the public API
 #: otherwise loop forever): 20 pages x 100 = 2000 assets per endpoint.
 MAX_PAGES = 20
 _NUM_ERR = (ValueError, TypeError, OverflowError)
+
+
+# --------------------------------------------------------------- "nothing there"
+# Two lookups come back empty for almost every wallet: legacy delegation and
+# own-validator staking. Once a wallet answered "nothing" the question is not
+# asked again for EMPTY_TTL seconds (kept on disk by the app). A wallet that
+# HAS such a position is never marked, so it is read on every refresh; a
+# position opened less than a day ago can therefore show up with that delay.
+EMPTY_TTL = 86400.0
+MAX_EMPTY_ENTRIES = 5000
+MAX_EMPTY_BYTES = 600_000
+_KINDS = ("legacy", "stake")
+
+
+class EmptyCache:
+    def __init__(self, path: str | None = None):
+        self.path = path
+        self.data: dict[str, dict[str, float]] = {}
+        self.dirty = False
+        self._lock = threading.Lock()
+        if path:
+            self._load()
+
+    def _load(self) -> None:
+        try:
+            if os.path.getsize(self.path) > MAX_EMPTY_BYTES:
+                return
+            with open(self.path, encoding="utf-8") as f:
+                doc = json.load(f)
+        except (OSError, ValueError):
+            return
+        entries = doc.get("empty") if isinstance(doc, dict) and doc.get("v") == 1 else None
+        now = time.time()
+        for addr, kinds in (entries.items() if isinstance(entries, dict) else ()):
+            if len(self.data) >= MAX_EMPTY_ENTRIES or not isinstance(addr, str) or not _MVX_RE.match(addr):
+                continue
+            if not isinstance(kinds, dict):
+                continue
+            for kind, ts in kinds.items():
+                if (
+                    kind in _KINDS and isinstance(ts, (int, float)) and not isinstance(ts, bool)
+                    and 0 < now - ts < EMPTY_TTL
+                ):
+                    self.data.setdefault(addr, {})[kind] = float(ts)
+
+    def is_empty(self, addr: str, kind: str) -> bool:
+        if not self.path:      # not configured (CLI, tests): always ask
+            return False
+        with self._lock:
+            ts = self.data.get(addr, {}).get(kind)
+        return ts is not None and 0 <= time.time() - ts < EMPTY_TTL
+
+    def mark(self, addr: str, kind: str, empty: bool) -> None:
+        if not self.path:
+            return
+        with self._lock:
+            if empty:
+                if len(self.data) < MAX_EMPTY_ENTRIES or addr in self.data:
+                    self.data.setdefault(addr, {})[kind] = time.time()
+                    self.dirty = True
+            elif self.data.get(addr, {}).pop(kind, None) is not None:
+                self.dirty = True
+
+    def save(self) -> None:
+        if not self.path:
+            return
+        with self._lock:
+            if not self.dirty:
+                return
+            blob = json.dumps({"v": 1, "empty": self.data})
+            self.dirty = False
+        try:
+            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
+            tmp = f"{self.path}.tmp"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(blob)
+            os.replace(tmp, self.path)
+        except OSError:
+            pass  # only a missed optimisation
+
+
+_EMPTY = EmptyCache()
+
+
+def set_empty_cache_path(path: str | None) -> None:
+    """Keep the "nothing there" answers in `path` (None = memory only)."""
+    global _EMPTY
+    if path is not None and _EMPTY.path == path:
+        return
+    _EMPTY = EmptyCache(path)
+
+
+def save_empty_cache() -> None:
+    _EMPTY.save()
 
 
 def _get(path: str):
@@ -75,6 +174,10 @@ _TYPE_MAP = {
     "NonFungibleESDT": "nft",
     "SemiFungibleESDT": "sft",
 }
+
+
+class _Skip(Exception):
+    """Internal: this lookup is skipped (answered "nothing" recently)."""
 
 
 class MultiversXProvider(BaseProvider):
@@ -259,9 +362,12 @@ class MultiversXProvider(BaseProvider):
 
         # Legacy (pre-staking-pools) delegation, still used by some addresses.
         try:
+            if _EMPTY.is_empty(address, "legacy"):
+                raise _Skip()
             legacy = _get(f"/accounts/{qaddr}/delegation-legacy")
             if not isinstance(legacy, dict):
                 legacy = {}
+            n_before = len(wallet.tokens)
             try:
                 legacy_staked = int(legacy.get("userStake", 0)) / 1e18
             except _NUM_ERR:
@@ -295,14 +401,20 @@ class MultiversXProvider(BaseProvider):
                         asset_type="delegation-legacy-unbonding",
                     )
                 )
+            _EMPTY.mark(address, "legacy", len(wallet.tokens) == n_before)
+        except _Skip:
+            pass
         except requests.RequestException as exc:
             warnings.append(f"could not fetch legacy delegation: {safe_error(exc)}")
 
         # Direct validator staking (running your own node).
         try:
+            if _EMPTY.is_empty(address, "stake"):
+                raise _Skip()
             stake_data = _get(f"/accounts/{qaddr}/stake")
             if not isinstance(stake_data, dict):
                 stake_data = {}
+            n_before = len(wallet.tokens)
             try:
                 validator_staked = int(stake_data.get("totalStaked", 0)) / 1e18
             except _NUM_ERR:
@@ -317,6 +429,9 @@ class MultiversXProvider(BaseProvider):
                         asset_type="validator-stake",
                     )
                 )
+            _EMPTY.mark(address, "stake", len(wallet.tokens) == n_before)
+        except _Skip:
+            pass
         except requests.RequestException as exc:
             warnings.append(f"could not fetch validator stake: {safe_error(exc)}")
 

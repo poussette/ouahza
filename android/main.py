@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.14"
+__version__ = "0.1.15"
 
 
 
@@ -61,7 +61,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.14"
+APP_VERSION = "0.1.15"
 
 
 def _version_problems() -> list[str]:
@@ -1195,7 +1195,10 @@ class OuahzaApp(App):
             t0 = time.monotonic()
             # Prix qui ne dépendent pas des soldes : demandés pendant la lecture des wallets.
             report.start_price_prefetch(entries)
+            from providers import multiversx as _mvx
+            _mvx.set_empty_cache_path(os.path.join(self.user_data_dir, "mvx_empty.json"))
             results = report.fetch_all(entries, workers=4, on_progress=progress)
+            _mvx.save_empty_cache()
             t_wallets = time.monotonic() - t0
 
             # Montants à jour affichés tout de suite, valorisés avec les derniers prix connus.

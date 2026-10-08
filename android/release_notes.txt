@@ -1,1 +1,1 @@
-v0.1.14: Valorisation LP en parallèle ; animation de chargement.
+v0.1.15: Valorisation LP en parallèle ; animation de chargement ; les réponses vides (délégation legacy, staking validateur) sont mémorisées 24 h.
