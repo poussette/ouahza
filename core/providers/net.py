@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 
 
@@ -90,7 +90,7 @@ MAX_RETRY_AFTER = 10.0
 #: (api.multiversx.com answers 429 when 24 wallets fire ~7 calls each at once).
 THROTTLE_ENABLED = True
 MIN_INTERVAL = {
-    "api.multiversx.com": 0.4,
+    "api.multiversx.com": 0.25,
     "gateway.multiversx.com": 0.15,
     "api.coingecko.com": 1.5,
 }

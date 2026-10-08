@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 
 
@@ -306,9 +306,61 @@ def _first_answer(sc, names, args, budget):
 
 # ------------------------------------------------------------------ chain facts
 
+# In-memory, per process (never written to disk), cleared by set_cache_path():
+#  * _PRICES    : unit price of an LP token, reused for LP_PRICE_TTL seconds;
+#  * _POOL_TOKENS: the two token ids of a pool already read once (the supply and
+#                  balance cross-checks in _verify still run on every read);
+#  * _FACTS_BATCH: token facts fetched 50 at a time, consumed by _token_facts.
+LP_PRICE_TTL = 900.0       # 15 minutes
+FACTS_BATCH_TTL = 120.0
+_PRICES: dict[str, tuple[float, dict]] = {}
+_POOL_TOKENS: dict[tuple[str, str], tuple[str, str]] = {}
+_FACTS_BATCH: dict[str, tuple[float, dict]] = {}
+
+
+def clear_runtime_caches() -> None:
+    _PRICES.clear()
+    _POOL_TOKENS.clear()
+    _FACTS_BATCH.clear()
+
+
 def _token_facts(lp: str):
     """{owner, supply_raw, decimals} for the LP token, or None."""
+    hit = _FACTS_BATCH.pop(lp, None)
+    if hit is not None and time.monotonic() - hit[0] < FACTS_BATCH_TTL:
+        return hit[1]
     d = request_json("GET", f"{MVX_API}/tokens/{quote(lp, safe='')}")
+    return _facts_from_doc(d)
+
+
+def prefetch_token_facts(lps: list[str]) -> None:
+    """One /tokens?identifiers=... call per 50 LP tokens instead of one call
+    each. A token whose list entry lacks the needed fields is simply read
+    individually later. Never raises."""
+    for i in range(0, len(lps), 50):
+        chunk = lps[i : i + 50]
+        try:
+            batch = request_json(
+                "GET", f"{MVX_API}/tokens",
+                params={"identifiers": ",".join(chunk), "size": len(chunk)},
+            )
+        except Exception:  # noqa: BLE001 - purely an optimisation
+            continue
+        if not isinstance(batch, list):
+            continue
+        wanted = set(chunk)
+        for d in batch:
+            ident = d.get("identifier") if isinstance(d, dict) else None
+            if ident in wanted:
+                try:
+                    facts = _facts_from_doc(d)
+                except Exception:  # noqa: BLE001
+                    facts = None
+                if facts:
+                    _FACTS_BATCH[ident] = (time.monotonic(), facts)
+
+
+def _facts_from_doc(d):
     if not isinstance(d, dict):
         return None
     decimals = safe_decimals(d.get("decimals"))
@@ -525,6 +577,7 @@ class LPCache:
             return False
         self.trusted[code_hash] = spec
         self.dirty = True
+        _PRICES.clear()   # the trust label of already priced LPs changed
         return True
 
     def is_failed(self, lp: str) -> bool:
@@ -560,6 +613,7 @@ def set_cache_path(path: str | None) -> None:
     """Persist the discovery cache at `path` (None = memory only)."""
     global _CACHE
     _CACHE = LPCache(path)
+    clear_runtime_caches()
 
 
 def default_cache_path() -> str:
@@ -579,38 +633,52 @@ def get_cache() -> LPCache:
 # --------------------------------------------------------------------- strategies
 
 def _try_pair3(spec, lp, facts, sc, ctx, budget):
-    if not _names_lp(spec, sc, lp, budget, []):
-        return None
-    _, a = _first_answer(sc, spec["first"], [], budget)
-    _, b = _first_answer(sc, spec["second"], [], budget)
-    if not a or not b:
-        return None
-    t1, t2 = as_token_id(a[0]), as_token_id(b[0])
-    if not t1 or not t2 or t1 == t2:
-        raise Inconsistent("bad pool tokens")
+    known = _POOL_TOKENS.get((lp, sc))
+    if known:
+        t1, t2 = known          # read before: only the live numbers are asked
+    else:
+        if not _names_lp(spec, sc, lp, budget, []):
+            return None
+        _, a = _first_answer(sc, spec["first"], [], budget)
+        _, b = _first_answer(sc, spec["second"], [], budget)
+        if not a or not b:
+            return None
+        t1, t2 = as_token_id(a[0]), as_token_id(b[0])
+        if not t1 or not t2 or t1 == t2:
+            raise Inconsistent("bad pool tokens")
     _, rs = _first_answer(sc, spec["reserves_and_supply"], [], budget)
     if not rs or len(rs) < 3:
         return None
     r1, r2, sup = as_uint(rs[0]), as_uint(rs[1]), as_uint(rs[2])
     if None in (r1, r2, sup):
         raise Inconsistent("unreadable reserves")
-    return _verify(spec, sc, facts, {t1: r1, t2: r2}, sup, budget)
+    state = _verify(spec, sc, facts, {t1: r1, t2: r2}, sup, budget)
+    _POOL_TOKENS[(lp, sc)] = (t1, t2)
+    return state
 
 
 def _try_named(spec, lp, facts, sc, ctx, budget):
-    if not _names_lp(spec, sc, lp, budget, []):
+    known = _POOL_TOKENS.get((lp, sc))
+    if not known and not _names_lp(spec, sc, lp, budget, []):
         return None
     got = {}
     for key in ("first", "second", "first_reserve", "second_reserve", "supply"):
+        if known and key in ("first", "second"):
+            continue
         _, ans = _first_answer(sc, spec[key], [], budget)
         if not ans:
             return None
         got[key] = ans[0]
-    t1, t2 = as_token_id(got["first"]), as_token_id(got["second"])
+    if known:
+        t1, t2 = known
+    else:
+        t1, t2 = as_token_id(got["first"]), as_token_id(got["second"])
     r1, r2, sup = as_uint(got["first_reserve"]), as_uint(got["second_reserve"]), as_uint(got["supply"])
     if not t1 or not t2 or t1 == t2 or None in (r1, r2, sup):
         raise Inconsistent("unreadable pool answers")
-    return _verify(spec, sc, facts, {t1: r1, t2: r2}, sup, budget)
+    state = _verify(spec, sc, facts, {t1: r1, t2: r2}, sup, budget)
+    _POOL_TOKENS[(lp, sc)] = (t1, t2)
+    return state
 
 
 def _try_keyed(spec, lp, facts, sc, ctx, budget):
@@ -732,6 +800,7 @@ def discover_pool(lp: str, budget: Budget, cache: dict) -> tuple[dict, PoolState
                 state = None
             if state:
                 return facts, state
+        _POOL_TOKENS.pop((lp, sc), None)
         lc.drop_good(lp)  # stale (pool migrated / contract upgraded): rediscover
     for sc in candidate_contracts(lp, facts):
         ctx = _ctx(cache, sc, budget)
@@ -829,12 +898,23 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
     lc = _CACHE
     valid = list(dict.fromkeys(c for c in candidates if _TOKEN_ID_RE.fullmatch(str(c))))
     ordered = valid[:MAX_LP_TOKENS]
+    over_limit = max(0, len(valid) - MAX_LP_TOKENS)
+    # prices computed less than LP_PRICE_TTL ago are reused as they are
+    out: dict[str, dict] = {}
+    now = time.monotonic()
+    for lp in ordered:
+        hit = _PRICES.get(lp)
+        if hit is not None and now - hit[0] < LP_PRICE_TTL:
+            out[lp] = dict(hit[1])
+    ordered = [lp for lp in ordered if lp not in out]
     unreadable = [lp for lp in ordered if lc.is_failed(lp)]
     # known pools first (cheap, certain), then the unexamined ones, in given order
     todo = sorted((lp for lp in ordered if not lc.is_failed(lp)), key=lambda lp: 0 if lc.good(lp) else 1)
     stats = LAST_STATS
     stats.update(candidates=len(valid), examined=0, valued=0, stopped=False,
-                 unreadable=len(unreadable), remaining=0)
+                 unreadable=len(unreadable), remaining=0, cached=len(out))
+    if todo:
+        prefetch_token_facts(todo)
     found: list[tuple[str, dict, PoolState]] = []
     total = len(todo)
     for _ in range(MAX_PASSES):
@@ -872,17 +952,18 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
         lc.save()
         todo = remaining
     stats["remaining"] = len(todo)
-    stats["remaining"] += max(0, len(valid) - len(ordered))
+    stats["remaining"] += over_limit
     stats["stopped"] = stats["remaining"] > 0
     lc.save()
     if not found:
-        return {}
+        stats["valued"] = len(out)
+        return out
     ids = {t for _, _, st in found for t in st.reserves}
     try:
         infos = fetch_infos(ids)
     except Exception:  # noqa: BLE001
-        return {}
-    out: dict[str, dict] = {}
+        stats["valued"] = len(out)
+        return out
     for lp, facts, st in found:
         detail = pool_value_detail(st, infos)
         if detail is None:
@@ -906,5 +987,6 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
             elif not st.verified:
                 label += ", contrat non vérifié"
             out[lp] = {"usd": price, "adapter": label, "supply": supply}
+            _PRICES[lp] = (time.monotonic(), dict(out[lp]))
     stats["valued"] = len(out)
     return out

@@ -93,6 +93,7 @@ def pair_views(r1=10 * E18, r2=40 * E18, sup=2000 * E18, lp=LPID):
 
 
 def run(chain, ids=(LPID,)):
+    lp.clear_runtime_caches()   # each run() is a fresh process: no 15-minute price reuse
     with mock.patch("requests.request", chain):
         return lp.price_lp_tokens(list(ids), pricing._fetch_token_info)
 

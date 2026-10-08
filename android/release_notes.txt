@@ -1,1 +1,1 @@
-v0.1.10: Amélioration de l'actualisation plus rapide : prix mis en cache, chargement en parallèle, dernier rapport affiché au lancement ; ligne de durées.
+v0.1.11: Valorisation LP plus rapide : prix gardé 15 min, lecture allégée des pools déjà connus ; requêtes plus rapprochées vers l'API MultiversX
