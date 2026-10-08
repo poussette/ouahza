@@ -1,1 +1,1 @@
-v0.1.12: Correctif : le cache de prix LP (15 min) n'était pas conservé entre deux actualisations.
+v0.1.13: Actualisation automatique au lancement ; pools LP mémorisés entre deux lancements ; ralentissement automatique en cas de limite de débit.

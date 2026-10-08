@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.12"
+__version__ = "0.1.13"
 
 
 
@@ -60,7 +60,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.12"
+APP_VERSION = "0.1.13"
 
 
 def _version_problems() -> list[str]:
@@ -754,6 +754,13 @@ class OuahzaApp(App):
 
     def on_start(self):
         self._load_last_report()
+        # Une configuration existe : l'actualisation démarre toute seule (le dernier
+        # rapport reste affiché pendant ce temps).
+        try:
+            if report.parse_input_text(self.settings.get("config_text", "")):
+                Clock.schedule_once(lambda dt: self.on_run(None), 0.3)
+        except ValueError:
+            pass
         if self.settings.get("check_updates", True):
             Clock.schedule_once(lambda dt: self.check_update(manual=False), 2.0)
 

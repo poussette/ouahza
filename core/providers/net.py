@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.12"
+__version__ = "0.1.13"
 
 
 
@@ -99,6 +99,32 @@ _throttle_lock = threading.Lock()
 _next_slot: dict[str, float] = {}
 
 
+#: after an HTTP 429 the host is asked less often: its interval is multiplied
+#: (x1.5 per 429, at most x3) and goes back to normal once PENALTY_HOLD seconds
+#: pass without another 429.
+PENALTY_STEP = 1.5
+PENALTY_MAX = 3.0
+PENALTY_HOLD = 120.0
+_penalty: dict[str, tuple[float, float]] = {}   # host -> (factor, valid until)
+
+
+def _note_429(host: str) -> None:
+    with _throttle_lock:
+        factor = _penalty.get(host, (1.0, 0.0))
+        cur = factor[0] if time.monotonic() < factor[1] else 1.0
+        _penalty[host] = (min(cur * PENALTY_STEP, PENALTY_MAX), time.monotonic() + PENALTY_HOLD)
+
+
+def _factor(host: str) -> float:
+    entry = _penalty.get(host)
+    return entry[0] if entry and time.monotonic() < entry[1] else 1.0
+
+
+def reset_penalties() -> None:
+    with _throttle_lock:
+        _penalty.clear()
+
+
 def _sleep(seconds: float) -> None:
     time.sleep(seconds)
 
@@ -143,8 +169,8 @@ def _throttle(url: str) -> None:
         host = urlsplit(url).hostname or ""
     except ValueError:
         return
-    interval = MIN_INTERVAL.get(host, DEFAULT_INTERVAL)
     with _throttle_lock:
+        interval = MIN_INTERVAL.get(host, DEFAULT_INTERVAL) * _factor(host)
         now = time.monotonic()
         slot = max(now, _next_slot.get(host, 0.0))
         _next_slot[host] = slot + interval
@@ -180,6 +206,7 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http):
         _count(urlsplit(url).hostname or "", "calls")
         if resp.status_code == 429:
             _count(urlsplit(url).hostname or "", "r429")
+            _note_429(urlsplit(url).hostname or "")
         location = resp.headers.get("Location") if 300 <= resp.status_code < 400 else None
         if not location:
             return resp

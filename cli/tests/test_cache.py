@@ -168,5 +168,47 @@ class StatsTests(unittest.TestCase):
         self.assertIn("1×429", net.stats_summary())
 
 
+class AdaptiveThrottleTests(unittest.TestCase):
+    def setUp(self):
+        net.reset_penalties()
+
+    def tearDown(self):
+        net.reset_penalties()
+
+    def test_429_slows_the_host_down_then_recovers(self):
+        self.assertEqual(net._factor("h.test"), 1.0)
+        net._note_429("h.test")
+        self.assertEqual(net._factor("h.test"), 1.5)
+        net._note_429("h.test")
+        self.assertEqual(net._factor("h.test"), 2.25)
+        for _ in range(5):
+            net._note_429("h.test")
+        self.assertEqual(net._factor("h.test"), net.PENALTY_MAX)
+        self.assertEqual(net._factor("other.test"), 1.0)        # per host
+        net._penalty["h.test"] = (3.0, time.monotonic() - 1)    # hold elapsed
+        self.assertEqual(net._factor("h.test"), 1.0)
+
+    def test_interval_uses_the_factor(self):
+        slept = []
+        with mock.patch.object(net, "THROTTLE_ENABLED", True), \
+                mock.patch.object(net, "_sleep", slept.append), \
+                mock.patch.dict(net.MIN_INTERVAL, {"slow.test": 1.0}), \
+                mock.patch.dict(net._next_slot, {}, clear=True):
+            net._note_429("slow.test")
+            net._throttle("https://slow.test/a")    # first slot: no wait
+            net._throttle("https://slow.test/b")    # waits one (penalised) interval
+        self.assertEqual(len(slept), 1)
+        self.assertGreater(slept[0], 1.3)
+        self.assertLessEqual(slept[0], 1.5)
+
+    def test_http_429_triggers_the_penalty(self):
+        seq = iter([FakeResp({}, status=429), FakeResp({"ok": 1})])
+        with mock.patch("requests.request", lambda *a, **k: next(seq)), \
+                mock.patch.object(net, "_sleep", lambda s: None), \
+                mock.patch.object(net, "RETRY_DELAYS", (0.0,)):
+            net.request_json("GET", "https://pen.test/")
+        self.assertGreater(net._factor("pen.test"), 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

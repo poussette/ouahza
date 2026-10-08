@@ -112,6 +112,52 @@ class LPCacheTests(unittest.TestCase):
             lp.set_cache_path(None)          # a different cache: start clean
             self.assertFalse(lp._PRICES)
 
+    def test_pool_tokens_survive_a_relaunch(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lp_cache.json")
+            lp.set_cache_path(path)
+            price(self.chain())
+            doc = json.load(open(path))
+            self.assertEqual(doc["pools"][LPID]["tokens"], [WEGLD, OTHER])
+            lp.set_cache_path(None)          # the app is closed...
+            lp.set_cache_path(path)          # ...and started again: cold memory, warm file
+            c = self.chain()
+            out = price(c)
+            names = [x[2]["funcName"] for x in vm_calls(c)]
+            self.assertIn(LPID, out)
+            self.assertNotIn("getFirstTokenId", names)
+            self.assertIn("getReservesAndTotalSupply", names)
+            self.assertTrue(any("/esdt/" in x[1] for x in c.calls))   # balances still cross-checked
+            self.assertEqual(json.load(open(path))["pools"][LPID]["tokens"], [WEGLD, OTHER])
+
+    def test_bad_persisted_tokens_ignored(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lp_cache.json")
+            for bad in (["x", "y"], [WEGLD, WEGLD], [WEGLD], "nope", [1, 2]):
+                json.dump({"v": 1, "pools": {LPID: {"sc": POOL, "spec": "xexchange-pair", "tokens": bad}}},
+                          open(path, "w"))
+                lp.set_cache_path(None)
+                lp.set_cache_path(path)
+                self.assertNotIn("tokens", lp.get_cache().pools[LPID])
+
+    def test_wrong_persisted_tokens_are_rejected_by_verification(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lp_cache.json")
+            json.dump({"v": 1, "pools": {LPID: {"sc": POOL, "spec": "xexchange-pair",
+                                                "tokens": [WEGLD, "FAKE-123456"]}}}, open(path, "w"))
+            lp.set_cache_path(None)
+            lp.set_cache_path(path)
+            out = price(self.chain())        # reserves belong to WEGLD/OTHER, not FAKE
+            # the stale entry is dropped and the pool is rediscovered correctly
+            self.assertIn(LPID, out)
+            self.assertEqual(lp.get_cache().pools[LPID]["tokens"], [WEGLD, OTHER])
+
     def test_trust_change_drops_cached_prices(self):
         c = self.chain()
         price(c)

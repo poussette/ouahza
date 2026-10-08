@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.12"
+__version__ = "0.1.13"
 
 
 
@@ -318,6 +318,12 @@ _POOL_TOKENS: dict[tuple[str, str], tuple[str, str]] = {}
 _FACTS_BATCH: dict[str, tuple[float, dict]] = {}
 
 
+def _persist_tokens(lp: str, sc: str) -> None:
+    toks = _POOL_TOKENS.get((lp, sc))
+    if toks:
+        _CACHE.put_tokens(lp, sc, toks)
+
+
 def clear_runtime_caches() -> None:
     _PRICES.clear()
     _POOL_TOKENS.clear()
@@ -535,7 +541,14 @@ class LPCache:
                 and isinstance(e.get("sc"), str) and _ADDR_RE.fullmatch(e["sc"])
                 and e.get("spec") in names
             ):
-                self.pools[lp] = {"sc": e["sc"], "spec": e["spec"]}
+                entry = {"sc": e["sc"], "spec": e["spec"]}
+                toks = e.get("tokens")
+                if (
+                    isinstance(toks, list) and len(toks) == 2 and toks[0] != toks[1]
+                    and all(isinstance(t, str) and _TOKEN_ID_RE.fullmatch(t) for t in toks)
+                ):
+                    entry["tokens"] = list(toks)   # the pool's two tokens (re-verified on every read)
+                self.pools[lp] = entry
         trusted = doc.get("trusted")
         for h, spec in (trusted.items() if isinstance(trusted, dict) else ()):
             if len(self.trusted) < 200 and _HASH_RE.fullmatch(str(h)) and spec in names:
@@ -556,9 +569,16 @@ class LPCache:
         e = self.pools.get(lp)
         return (e["sc"], e["spec"]) if e else None
 
+    def put_tokens(self, lp: str, sc: str, tokens) -> None:
+        e = self.pools.get(lp)
+        if e and e["sc"] == sc and list(tokens) != e.get("tokens"):
+            e["tokens"] = list(tokens)
+            self.dirty = True
+
     def put_good(self, lp: str, sc: str, spec: str) -> None:
         if len(self.pools) < MAX_CACHE_ENTRIES or lp in self.pools:
-            if self.pools.get(lp) != {"sc": sc, "spec": spec}:
+            cur = self.pools.get(lp)
+            if not cur or cur["sc"] != sc or cur["spec"] != spec:
                 self.pools[lp] = {"sc": sc, "spec": spec}
                 self.dirty = True
         if self.fail.pop(lp, None) is not None:
@@ -616,6 +636,9 @@ def set_cache_path(path: str | None) -> None:
         return  # same file: keep the live cache and the 15-minute prices (the app calls this on every refresh)
     _CACHE = LPCache(path)
     clear_runtime_caches()
+    for lp, e in _CACHE.pools.items():     # pools read in a previous session
+        if e.get("tokens"):
+            _POOL_TOKENS[(lp, e["sc"])] = tuple(e["tokens"])
 
 
 def default_cache_path() -> str:
@@ -801,6 +824,7 @@ def discover_pool(lp: str, budget: Budget, cache: dict) -> tuple[dict, PoolState
             except Inconsistent:
                 state = None
             if state:
+                _persist_tokens(lp, sc)
                 return facts, state
         _POOL_TOKENS.pop((lp, sc), None)
         lc.drop_good(lp)  # stale (pool migrated / contract upgraded): rediscover
@@ -819,6 +843,7 @@ def discover_pool(lp: str, budget: Budget, cache: dict) -> tuple[dict, PoolState
             if state:
                 ctx["spec"] = spec
                 lc.put_good(lp, sc, spec["name"])
+                _persist_tokens(lp, sc)
                 return facts, state
         if not answered and ctx["spec"] is None and not ctx.get("id_map"):
             ctx["dead"] = True  # speaks none of the known dialects: skip for other LPs
