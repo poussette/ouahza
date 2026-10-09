@@ -1,1 +1,1 @@
-v0.1.22: En-tête de wallet sur deux lignes : l’adresse raccourcie ne passe plus à la ligne.
+v0.1.23: Lecture de 2 wallets à la fois pour limiter les erreurs 429, wallets lus partiellement relus avec alerte si le total est incomplet, écran maintenu allumé pendant l’actualisation.

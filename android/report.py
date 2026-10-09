@@ -5,7 +5,7 @@ config format directly instead of pointing at a file on disk)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.22"
+__version__ = "0.1.23"
 
 
 
@@ -33,6 +33,9 @@ from providers.safe import (
 )
 
 MAX_WORKERS = 16
+#: wallets read side by side by the app: 2 keeps api.multiversx.com from answering 429
+#: in bursts (4 triggered storms that cost more time than the parallelism saved).
+APP_WORKERS = 2
 
 
 def fmt_money(value: float | None) -> str:
@@ -159,9 +162,11 @@ def fetch_all(
     return results
 
 
-#: wallets that failed on a passing problem (rate limit, timeout, server hiccup)
-#: get one more try once the burst is over. Bad addresses are not retried.
-RETRY_PASS_DELAY = 4.0
+#: wallets that failed on a passing problem (rate limit, timeout, server hiccup) --
+#: whole wallet in error, or read only partly (tokens / staking missing, which would
+#: silently under-count the total) -- are tried again, after a pause, up to twice.
+#: Bad addresses are not retried.
+RETRY_PASS_DELAYS = (4.0, 10.0)
 _TRANSIENT_MARKERS = ("429", "http 5", "timed out", "timeout", "connection", "temporar", "reset by peer")
 
 
@@ -170,17 +175,44 @@ def _is_transient(error: str | None) -> bool:
     return any(m in low for m in _TRANSIENT_MARKERS)
 
 
+def is_incomplete(w) -> bool:
+    """Read only partly because of a passing problem (the warning carries the cause)."""
+    if w is None or w.error or not w.warning:
+        return False
+    low = w.warning.lower()
+    return ("could not fetch" in low or "skipped" in low) and _is_transient(w.warning)
+
+
+def count_incomplete(results) -> int:
+    return sum(1 for w in results if is_incomplete(w))
+
+
+def _needs_retry(w) -> bool:
+    return w is not None and ((bool(w.error) and _is_transient(w.error)) or is_incomplete(w))
+
+
+def _better(new, old) -> bool:
+    if new.error:
+        return False
+    if old.error:
+        return True
+    if not is_incomplete(new):
+        return True
+    return len((new.warning or "").split(";")) < len((old.warning or "").split(";"))
+
+
 def _retry_transient(results, entries) -> None:
-    todo = [i for i, w in enumerate(results) if w is not None and w.error and _is_transient(w.error)]
-    if not todo:
-        return
-    time.sleep(RETRY_PASS_DELAY)
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = {pool.submit(resolve_wallet, *entries[i]): i for i in todo}
-        for future in as_completed(futures):
-            new = future.result()
-            if not new.error:
-                results[futures[future]] = new
+    for delay in RETRY_PASS_DELAYS:
+        todo = [i for i, w in enumerate(results) if _needs_retry(w)]
+        if not todo:
+            return
+        time.sleep(delay)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = {pool.submit(resolve_wallet, *entries[i]): i for i in todo}
+            for future in as_completed(futures):
+                new, i = future.result(), futures[future]
+                if _better(new, results[i]):
+                    results[i] = new
 
 
 # ------------------------------------------------- last report kept on the phone

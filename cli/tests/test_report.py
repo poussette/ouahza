@@ -85,8 +85,81 @@ class RetryTransientTests(unittest.TestCase):
 
         entries = [(None, None, "ok"), (None, None, "flaky"), (None, None, "bad")]
         with mock.patch.object(report, "resolve_wallet", fake), \
-                mock.patch.object(report, "RETRY_PASS_DELAY", 0):
+                mock.patch.object(report, "RETRY_PASS_DELAYS", (0, 0)):
             res = report.fetch_all(entries, workers=2)
         self.assertEqual([bool(w.error) for w in res], [False, False, True])
         self.assertEqual(calls.count("flaky"), 2)
         self.assertEqual(calls.count("bad"), 1)
+
+
+class IncompleteWalletTests(unittest.TestCase):
+    def wallet(self, warning=None, error=None, n=0):
+        w = WalletBalance("multiversx", A, "EGLD", native_amount=1.0, warning=warning, error=error)
+        w.tokens = [TokenBalance("X", "x", 1.0, contract="X-1", asset_type="esdt")] * n
+        return w
+
+    def test_what_counts_as_incomplete(self):
+        self.assertTrue(report.is_incomplete(self.wallet("could not fetch ESDT/MetaESDT tokens: HTTP 429 from api.multiversx.com")))
+        self.assertTrue(report.is_incomplete(self.wallet("Etherscan error, tokens skipped: timed out")))
+        self.assertFalse(report.is_incomplete(self.wallet("asset list truncated at 3000 entries")))
+        self.assertFalse(report.is_incomplete(self.wallet("could not fetch NFTs/SFTs: HTTP 404 from x")))   # permanent
+        self.assertFalse(report.is_incomplete(self.wallet(error="HTTP 429")))                              # an error, not partial
+        self.assertFalse(report.is_incomplete(self.wallet()))
+
+    def test_partial_wallet_is_read_again_and_replaced_when_complete(self):
+        from unittest import mock
+        bad = "could not fetch ESDT/MetaESDT tokens: HTTP 429 from api.multiversx.com"
+        calls = []
+
+        def fake(label, chain, addr):
+            calls.append(addr)
+            if addr == "lp" and calls.count("lp") == 1:
+                return self.wallet(bad, n=0)
+            return self.wallet(None, n=3)
+
+        entries = [(None, None, "lp"), (None, None, "fine")]
+        with mock.patch.object(report, "resolve_wallet", fake), \
+                mock.patch.object(report, "RETRY_PASS_DELAYS", (0, 0)):
+            res = report.fetch_all(entries, workers=2)
+        self.assertEqual(len(res[0].tokens), 3)
+        self.assertIsNone(res[0].warning)
+        self.assertEqual(calls.count("lp"), 2)
+        self.assertEqual(calls.count("fine"), 1)
+        self.assertEqual(report.count_incomplete(res), 0)
+
+    def test_still_partial_after_two_retries_is_counted(self):
+        from unittest import mock
+        bad = "could not fetch ESDT/MetaESDT tokens: HTTP 429 from api.multiversx.com"
+        calls = []
+
+        def fake(label, chain, addr):
+            calls.append(addr)
+            return self.wallet(bad)
+
+        with mock.patch.object(report, "resolve_wallet", fake), \
+                mock.patch.object(report, "RETRY_PASS_DELAYS", (0, 0)):
+            res = report.fetch_all([(None, None, "lp")], workers=1)
+        self.assertEqual(calls.count("lp"), 3)             # first read + two retries
+        self.assertEqual(report.count_incomplete(res), 1)
+
+
+class WorkersTests(unittest.TestCase):
+    def test_app_reads_two_wallets_at_a_time(self):
+        from unittest import mock
+        import threading
+        self.assertEqual(report.APP_WORKERS, 2)
+        live, peak, lock = [0], [0], threading.Lock()
+
+        def fake(label, chain, addr):
+            import time
+            with lock:
+                live[0] += 1
+                peak[0] = max(peak[0], live[0])
+            time.sleep(0.02)
+            with lock:
+                live[0] -= 1
+            return WalletBalance("multiversx", A, "EGLD", native_amount=1.0)
+
+        with mock.patch.object(report, "resolve_wallet", fake):
+            report.fetch_all([(None, None, str(i)) for i in range(8)], workers=report.APP_WORKERS)
+        self.assertEqual(peak[0], 2)

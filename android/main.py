@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.22"
+__version__ = "0.1.23"
 
 
 
@@ -61,7 +61,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.22"
+APP_VERSION = "0.1.23"
 
 
 def _version_problems() -> list[str]:
@@ -805,6 +805,31 @@ class OuahzaApp(App):
         except Exception:
             pass
 
+    def _keep_awake(self, on: bool) -> None:
+        """Écran maintenu allumé pendant une actualisation (FLAG_KEEP_SCREEN_ON, sans
+        permission) : sinon Android met l'app en pause et bride son réseau écran éteint.
+        Relâché dès que le travail est fini."""
+        if platform != "android":
+            return
+        try:
+            from android.runnable import run_on_ui_thread
+            from jnius import autoclass
+
+            params = autoclass("android.view.WindowManager$LayoutParams")
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+
+            @run_on_ui_thread
+            def _apply():
+                window = activity.getWindow()
+                if on:
+                    window.addFlags(params.FLAG_KEEP_SCREEN_ON)
+                else:
+                    window.clearFlags(params.FLAG_KEEP_SCREEN_ON)
+
+            _apply()
+        except Exception:
+            pass
+
     # ------------------------------------------------- dernier rapport conservé
 
     def _report_path(self):
@@ -1360,6 +1385,7 @@ class OuahzaApp(App):
     def _busy_start(self):
         """Barre qui glisse + points qui s'animent sur le bouton, tant que ça travaille."""
         self.busy.start()
+        self._keep_awake(True)
         self._busy_n = 0
         if self._busy_ev is None:
             self._busy_ev = Clock.schedule_interval(self._busy_tick, 0.4)
@@ -1372,6 +1398,7 @@ class OuahzaApp(App):
 
     def _busy_stop(self):
         self.busy.stop()
+        self._keep_awake(False)
         if self._busy_ev is not None:
             self._busy_ev.cancel()
             self._busy_ev = None
@@ -1398,7 +1425,7 @@ class OuahzaApp(App):
             report.start_price_prefetch(entries)
             from providers import multiversx as _mvx
             _mvx.set_empty_cache_path(os.path.join(self.user_data_dir, "mvx_empty.json"))
-            results = report.fetch_all(entries, workers=4, on_progress=progress)
+            results = report.fetch_all(entries, workers=report.APP_WORKERS, on_progress=progress)
             _mvx.save_empty_cache()
             t_wallets = time.monotonic() - t0
 
@@ -1424,6 +1451,11 @@ class OuahzaApp(App):
 
                 priced_ok = _pricing.apply_pricing(results, on_progress=_lp_progress) is not False
                 notes = [clean_text(n, 120) for n in _pricing.LAST_NOTES]
+                n_inc = report.count_incomplete(results)
+                if n_inc:
+                    notes.append(
+                        f"{n_inc} wallet(s) lus partiellement (limite d'appels de l'API) : le total peut être sous-évalué, réactualise"
+                    )
                 timings = dict(_pricing.LAST_TIMINGS)
             except Exception:
                 priced_ok = False  # offline / pricing down: keep raw balances
