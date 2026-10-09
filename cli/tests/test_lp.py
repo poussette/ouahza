@@ -377,7 +377,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
         doc = json.load(open(path))
         self.assertEqual(doc["pools"][LPID]["sc"], POOL)
-        self.assertNotIn("usd", json.dumps(doc))      # no price/reserve is stored
+        self.assertNotIn("usd", json.dumps(doc["pools"]))   # no price/reserve in the pool entries
         lp.set_cache_path(path)                         # "next launch"
         ch2 = Chain({WEGLD: 12 * E18, OTHER: 50 * E18}, pair_views())
         out = run(ch2)

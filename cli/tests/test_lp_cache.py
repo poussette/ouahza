@@ -122,7 +122,9 @@ class LPCacheTests(unittest.TestCase):
             doc = json.load(open(path))
             self.assertEqual(doc["pools"][LPID]["tokens"], [WEGLD, OTHER])
             lp.set_cache_path(None)          # the app is closed...
-            lp.set_cache_path(path)          # ...and started again: cold memory, warm file
+            real = lp.time.time              # ...and restarted > 5 min later: cold prices, warm pools
+            with mock.patch.object(lp.time, "time", lambda: real() + lp.LP_PRICE_TTL + 5):
+                lp.set_cache_path(path)
             c = self.chain()
             out = price(c)
             names = [x[2]["funcName"] for x in vm_calls(c)]
@@ -232,6 +234,61 @@ class ParallelTests(unittest.TestCase):
             lp.price_lp_tokens(ids, fetch, on_progress=lambda *a: seen.append(a))
         self.assertEqual(sorted(x[0] for x in seen), [1, 2])
         self.assertTrue(all(x[1] == 2 for x in seen))
+
+
+class PersistedPriceTests(unittest.TestCase):
+    """A stop/relaunch within 5 minutes reuses the LP prices saved on disk."""
+
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "lp_cache.json")
+        pricing.clear_cache()
+
+    def tearDown(self):
+        lp.set_cache_path(None)
+
+    def chain(self):
+        return Chain({WEGLD: 12 * E18, OTHER: 50 * E18}, pair_views())
+
+    def relaunch(self):
+        lp.set_cache_path(None)            # new process: nothing in memory
+        lp.set_cache_path(self.path)
+
+    def test_relaunch_reuses_fresh_prices(self):
+        lp.set_cache_path(self.path)
+        first = price(self.chain())
+        self.assertIn(LPID, first)
+        self.relaunch()
+        c = self.chain()
+        second = price(c)
+        self.assertEqual(len(c.calls), 0)
+        self.assertEqual(second[LPID]["usd"], first[LPID]["usd"])
+
+    def test_relaunch_after_ttl_recomputes(self):
+        lp.set_cache_path(self.path)
+        price(self.chain())
+        real = lp.time.time
+        with mock.patch.object(lp.time, "time", lambda: real() + lp.LP_PRICE_TTL + 5):
+            self.relaunch()
+        c = self.chain()
+        price(c)
+        self.assertTrue(len(c.calls) > 0)
+
+    def test_revocation_drops_saved_prices(self):
+        lp.set_cache_path(self.path)
+        price(self.chain())
+        lp._drop_prices()
+        lp.get_cache().save()
+        self.relaunch()
+        self.assertEqual(lp.get_cache().prices, {})
+
+    def test_garbage_prices_ignored(self):
+        import json
+        with open(self.path, "w") as f:
+            json.dump({"v": 1, "prices": {LPID: {"ts": "x", "usd": -1, "adapter": 3}}}, f)
+        lp.set_cache_path(self.path)
+        self.assertEqual(lp.get_cache().prices, {})
 
 
 if __name__ == "__main__":

@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.23"
+__version__ = "0.1.24"
 
 
 
@@ -316,8 +316,10 @@ def _first_answer(sc, names, args, budget):
 
 # ------------------------------------------------------------------ chain facts
 
-# In-memory, per process (never written to disk), cleared by set_cache_path():
+# In-memory, cleared by set_cache_path():
 #  * _PRICES    : unit price of an LP token, reused for LP_PRICE_TTL seconds (5 min);
+#                 also written (with wall-clock time) to the cache file so that a quick
+#                 stop/relaunch within those 5 minutes reuses them;
 #  * _POOL_TOKENS: the two token ids of a pool already read once (the supply and
 #                  balance cross-checks in _verify still run on every read);
 #  * _FACTS_BATCH: token facts fetched 50 at a time, consumed by _token_facts.
@@ -367,9 +369,17 @@ def revoke_approval(code_hash: str) -> bool:
     if _CACHE.trusted.pop(code_hash, None) is None:
         return False
     _CACHE.dirty = True
-    _PRICES.clear()        # LP prices already computed carried the "approved" label
+    _drop_prices()         # LP prices already computed carried the "approved" label
     _CACHE.save()
     return True
+
+
+def _drop_prices() -> None:
+    """Forget every LP price (memory and file): their trust label changed."""
+    _PRICES.clear()
+    if _CACHE.prices:
+        _CACHE.prices.clear()
+        _CACHE.dirty = True
 
 
 def clear_runtime_caches() -> None:
@@ -573,6 +583,7 @@ class LPCache:
         self.pools: dict[str, dict] = {}
         self.fail: dict[str, float] = {}
         self.trusted: dict[str, str] = {}   # code hash -> adapter, approved by the user
+        self.prices: dict[str, dict] = {}   # lp -> {ts (wall clock), usd, adapter, supply}: < LP_PRICE_TTL old
         self.dirty = False
         if path:
             self._load()
@@ -608,6 +619,20 @@ class LPCache:
         for h, spec in (trusted.items() if isinstance(trusted, dict) else ()):
             if len(self.trusted) < 200 and _HASH_RE.fullmatch(str(h)) and spec in names:
                 self.trusted[h] = spec
+        prices = doc.get("prices")
+        now_w = time.time()
+        for lp, e in (prices.items() if isinstance(prices, dict) else ()):
+            if not (isinstance(lp, str) and _TOKEN_ID_RE.fullmatch(lp) and isinstance(e, dict)
+                    and len(self.prices) < MAX_CACHE_ENTRIES):
+                continue
+            ts, usd, ad, sup = e.get("ts"), e.get("usd"), e.get("adapter"), e.get("supply")
+            if (
+                isinstance(ts, (int, float)) and not isinstance(ts, bool) and 0 <= now_w - ts < LP_PRICE_TTL
+                and isinstance(usd, (int, float)) and not isinstance(usd, bool) and usd > 0 and usd < 1e15
+                and isinstance(ad, str) and len(ad) < 200
+                and (sup is None or (isinstance(sup, (int, float)) and not isinstance(sup, bool)))
+            ):
+                self.prices[lp] = {"ts": float(ts), "usd": float(usd), "adapter": ad, "supply": sup}
         # "unreadable" verdicts only hold for the adapter set that produced them
         fails = doc.get("fail")
         if doc.get("sig") == _adapter_signature() and doc.get("failv") == FAIL_FORMAT and isinstance(fails, dict):
@@ -652,7 +677,7 @@ class LPCache:
             return False
         self.trusted[code_hash] = spec
         self.dirty = True
-        _PRICES.clear()   # the trust label of already priced LPs changed
+        _drop_prices()    # the trust label of already priced LPs changed
         return True
 
     def is_failed(self, lp: str) -> bool:
@@ -664,11 +689,29 @@ class LPCache:
             self.fail[lp] = time.time()
             self.dirty = True
 
+    def _fresh_prices(self) -> dict:
+        now = time.time()
+        for lp in [k for k, e in self.prices.items() if not 0 <= now - e["ts"] < LP_PRICE_TTL]:
+            del self.prices[lp]
+        return self.prices
+
+    def put_price(self, lp: str, value: dict) -> None:
+        sup = value.get("supply")
+        if not (isinstance(value.get("usd"), (int, float)) and isinstance(value.get("adapter"), str)):
+            return
+        if sup is not None and not isinstance(sup, (int, float)):
+            return
+        if len(self.prices) < MAX_CACHE_ENTRIES or lp in self.prices:
+            self.prices[lp] = {"ts": time.time(), "usd": float(value["usd"]),
+                               "adapter": value["adapter"], "supply": sup}
+            self.dirty = True
+
     def save(self) -> None:
         if not self.path or not self.dirty:
             return
         data = json.dumps({"v": 1, "sig": _adapter_signature(), "failv": FAIL_FORMAT, "pools": self.pools,
-                           "fail": self.fail, "trusted": self.trusted})
+                           "fail": self.fail, "trusted": self.trusted,
+                           "prices": self._fresh_prices()})
         try:
             os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
             tmp = f"{self.path}.tmp"
@@ -694,6 +737,9 @@ def set_cache_path(path: str | None) -> None:
     for lp, e in _CACHE.pools.items():     # pools read in a previous session
         if e.get("tokens"):
             _POOL_TOKENS[(lp, e["sc"])] = tuple(e["tokens"])
+    mono, wall = time.monotonic(), time.time()
+    for lp, e in _CACHE.prices.items():    # prices computed < 5 min ago by the previous process
+        _PRICES[lp] = (mono - (wall - e["ts"]), {"usd": e["usd"], "adapter": e["adapter"], "supply": e["supply"]})
 
 
 def default_cache_path() -> str:
@@ -1096,5 +1142,7 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
             out[lp] = {"usd": price, "adapter": label, "supply": supply}
             PENDING.pop(lp, None)
             _PRICES[lp] = (time.monotonic(), dict(out[lp]))
+            lc.put_price(lp, out[lp])
     stats["valued"] = len(out)
+    lc.save()          # the freshly priced LPs, for a quick relaunch
     return out
