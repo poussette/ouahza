@@ -1,1 +1,1 @@
-v0.1.17: Actualisation plus fiable au lancement (démarrage prudent, nouvelle tentative des wallets en échec passager), prix LP gardés 5 min, récap par type déplacé dans le label déplié, copie d'adresse depuis l'en-tête du wallet.
+v0.1.18: Valorisation des LP toujours active, approbation des contrats LP inconnus depuis l’app (mémorisée), clés et API regroupées sur une page dédiée,révocation des contrats approuvés dans les Paramètres
