@@ -1,4 +1,4 @@
-"""LP price reuse (15 min), known-pool fast path and batched token facts."""
+"""LP price reuse (5 min), known-pool fast path and batched token facts."""
 import os
 import sys
 import unittest

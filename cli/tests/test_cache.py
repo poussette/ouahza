@@ -126,6 +126,18 @@ class CacheTests(unittest.TestCase):
         self.assertIn("prix", pricing.LAST_TIMINGS)
         self.assertIn("lp", pricing.LAST_TIMINGS)
 
+    def test_mex_prefetch_waits_so_wallets_go_first(self):
+        slept = []
+        with mock.patch.object(pricing.time, "sleep", slept.append), \
+                mock.patch.object(pricing, "_fetch_native_prices", lambda c: None), \
+                mock.patch.object(pricing, "_fetch_usd_eur_rate", lambda: None), \
+                mock.patch.object(pricing, "_fetch_mex_tokens_prices", lambda: None):
+            pricing.prefetch({"multiversx"})
+            deadline = time.time() + 2
+            while not slept and time.time() < deadline:
+                time.sleep(0.01)
+        self.assertEqual(slept[:1], [pricing.MEX_PREFETCH_DELAY])
+
     def test_second_apply_pricing_makes_no_price_call(self):
         fake = counting({
             "simple/price": FakeResp({"ethereum": {"usd": 2000, "eur": 1800}}),
@@ -190,6 +202,17 @@ class AdaptiveThrottleTests(unittest.TestCase):
         self.assertAlmostEqual(net._factor("h.test"), 2.0, places=1)
         net._penalty["h.test"] = (3.0, now - 3 * net.PENALTY_RECOVERY)   # three calm steps
         self.assertEqual(net._factor("h.test"), 1.0)
+
+    def test_warm_start_is_gentle_and_never_lowers_a_penalty(self):
+        self.assertEqual(net.MIN_INTERVAL["api.multiversx.com"], 0.3)
+        net.warm_start()
+        self.assertAlmostEqual(net._factor("api.multiversx.com"), 1.5, places=1)
+        self.assertEqual(net._factor("gateway.multiversx.com"), 1.0)
+        net._penalty["api.multiversx.com"] = (3.0, time.monotonic())
+        net.warm_start()
+        self.assertAlmostEqual(net._factor("api.multiversx.com"), 3.0, places=1)
+        net._penalty["api.multiversx.com"] = (1.5, time.monotonic() - 3 * net.PENALTY_RECOVERY)
+        self.assertEqual(net._factor("api.multiversx.com"), 1.0)
 
     def test_interval_uses_the_factor(self):
         slept = []

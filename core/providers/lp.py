@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.16"
+__version__ = "0.1.17"
 
 
 
@@ -314,11 +314,11 @@ def _first_answer(sc, names, args, budget):
 # ------------------------------------------------------------------ chain facts
 
 # In-memory, per process (never written to disk), cleared by set_cache_path():
-#  * _PRICES    : unit price of an LP token, reused for LP_PRICE_TTL seconds;
+#  * _PRICES    : unit price of an LP token, reused for LP_PRICE_TTL seconds (5 min);
 #  * _POOL_TOKENS: the two token ids of a pool already read once (the supply and
 #                  balance cross-checks in _verify still run on every read);
 #  * _FACTS_BATCH: token facts fetched 50 at a time, consumed by _token_facts.
-LP_PRICE_TTL = 900.0       # 15 minutes
+LP_PRICE_TTL = 300.0       # 5 minutes
 FACTS_BATCH_TTL = 120.0
 _PRICES: dict[str, tuple[float, dict]] = {}
 _POOL_TOKENS: dict[tuple[str, str], tuple[str, str]] = {}

@@ -60,3 +60,33 @@ class ReportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetryTransientTests(unittest.TestCase):
+    def test_only_passing_errors_are_retried(self):
+        self.assertTrue(report._is_transient("HTTP 429 from api.multiversx.com"))
+        self.assertTrue(report._is_transient("HTTP 503 from x"))
+        self.assertTrue(report._is_transient("Read timed out"))
+        self.assertFalse(report._is_transient("Invalid MultiversX address format."))
+        self.assertFalse(report._is_transient("HTTP 404 from x"))
+        self.assertFalse(report._is_transient(None))
+
+    def test_failed_wallet_is_retried_once_and_bad_address_is_not(self):
+        from unittest import mock
+        calls = []
+
+        def fake(label, chain, addr):
+            calls.append(addr)
+            if addr == "flaky" and calls.count("flaky") == 1:
+                return WalletBalance("multiversx", addr, "EGLD", error="HTTP 429 from api.multiversx.com")
+            if addr == "bad":
+                return WalletBalance("multiversx", addr, "EGLD", error="Invalid MultiversX address format.")
+            return WalletBalance("multiversx", addr, "EGLD", native_amount=1.0)
+
+        entries = [(None, None, "ok"), (None, None, "flaky"), (None, None, "bad")]
+        with mock.patch.object(report, "resolve_wallet", fake), \
+                mock.patch.object(report, "RETRY_PASS_DELAY", 0):
+            res = report.fetch_all(entries, workers=2)
+        self.assertEqual([bool(w.error) for w in res], [False, False, True])
+        self.assertEqual(calls.count("flaky"), 2)
+        self.assertEqual(calls.count("bad"), 1)

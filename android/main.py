@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.16"
+__version__ = "0.1.17"
 
 
 
@@ -61,7 +61,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.16"
+APP_VERSION = "0.1.17"
 
 
 def _version_problems() -> list[str]:
@@ -464,6 +464,38 @@ class Chevron(Widget):
             Line(points=pts, width=dp(1.6), cap="round", joint="round")
 
 
+class AddrCopy(Label):
+    """Shortened address in a wallet's header bar. Closed wallet: a tap goes to
+    the header (it opens the wallet). Open wallet: a tap copies the full address."""
+
+    def __init__(self, full, chev, **kwargs):
+        self._full = full
+        self._chev = chev
+        self._short = short_addr(full)
+        kwargs.setdefault("font_size", sp(11))
+        kwargs.setdefault("color", MUTED)
+        kwargs.setdefault("halign", "left")
+        kwargs.setdefault("valign", "middle")
+        super().__init__(text=self._short, **kwargs)
+        self.bind(size=lambda w, s: setattr(w, "text_size", s))
+        self._reset_ev = None
+
+    def on_touch_down(self, touch):
+        if self._chev.open and self.collide_point(*touch.pos):
+            Clipboard.copy(self._full)
+            self.text = "adresse copiée"
+            self.color = ACCENT
+            if self._reset_ev is not None:
+                self._reset_ev.cancel()
+            self._reset_ev = Clock.schedule_once(self._reset, 1.5)
+            return True
+        return False
+
+    def _reset(self, *_):
+        self.text = self._short
+        self.color = MUTED
+
+
 class Bar(Widget):
     """Thin progress bar: `frac` (0..1) of the width filled with `color`."""
 
@@ -815,6 +847,11 @@ class OuahzaApp(App):
 
     def on_start(self):
         self._load_last_report()
+        try:
+            from providers import net as _net
+            _net.warm_start()   # premières requêtes plus espacées, relâché tout seul en ~20 s
+        except Exception:  # noqa: BLE001
+            pass
         # Une configuration existe : l'actualisation démarre toute seule (le dernier
         # rapport reste affiché pendant ce temps).
         try:
@@ -1465,7 +1502,7 @@ class OuahzaApp(App):
 
     def _label_header(self, e):
         card = TapCard(
-            orientation="vertical", size_hint=(1, None), height=dp(114),
+            orientation="vertical", size_hint=(1, None), height=dp(88),
             padding=(dp(16), dp(12), dp(16), dp(12)), spacing=dp(8),
         )
         row1 = BoxLayout(size_hint=(1, None), height=dp(26), spacing=dp(10))
@@ -1488,15 +1525,17 @@ class OuahzaApp(App):
         )
         row3.add_widget(mk_label(right_txt, size=12, color=MUTED, halign="right"))
         card.add_widget(row3)
-        counts = self._counts_text(self._type_stats(e["wallets"]))
-        if counts:
-            card.add_widget(WrapLabel(
-                text=f"[color={MUTED_HEX}]{counts}[/color]", markup=True, font_size=sp(11), min_height=dp(16),
-            ))
         return card, chev
 
     def _label_body(self, wallets):
         body = Panel(bg=CLEAR, padding=(dp(10), 0, dp(10), dp(10)), spacing=dp(8))
+        # Recap of the number of positions per type: shown once the label is open.
+        counts = self._counts_text(self._type_stats(wallets))
+        if counts:
+            body.add_widget(WrapLabel(
+                text=f"[color={MUTED_HEX}]{counts}[/color]", markup=True, font_size=sp(11),
+                min_height=dp(16), padding=(dp(6), 0),
+            ))
         wallets = sorted(wallets, key=lambda w: -(w.total_eur if (not w.error and w.total_eur is not None) else -1.0))
         mine = {id(w) for w in wallets}
         self.wallet_colls = [c for c in self.wallet_colls if id(c.wallet) not in mine]
@@ -1516,11 +1555,12 @@ class OuahzaApp(App):
             orientation="horizontal", size_hint=(1, None), height=dp(56),
             padding=(dp(14), dp(8), dp(12), dp(8)), spacing=dp(10), radius=dp(12),
         )
+        chev = Chevron()
         card.add_widget(Dot(CHAIN_COLORS.get(w.chain, OTHER_COLOR), size=8))
         card.add_widget(mk_label(
-            f"[b]{esc(w.chain)}[/b]  [size={int(sp(11))}][color={MUTED_HEX}]{esc(short_addr(w.address))}[/color][/size]",
-            size=13, markup=True,
+            f"[b]{esc(w.chain)}[/b]", size=13, markup=True, size_hint=(None, 1), width=dp(84),
         ))
+        card.add_widget(AddrCopy(w.address, chev))
         if w.error:
             total = f"[color={RED_HEX}]erreur[/color]"
         else:
@@ -1528,23 +1568,11 @@ class OuahzaApp(App):
         card.add_widget(mk_label(
             total, size=13, bold=True, halign="right", markup=True, size_hint=(None, 1), width=dp(84),
         ))
-        chev = Chevron()
         card.add_widget(chev)
         return card, chev
 
     def _wallet_body(self, w):
         body = Panel(bg=CLEAR, padding=(dp(14), 0, dp(14), dp(10)), spacing=dp(2))
-        addr_btn = RoundedButton(
-            text=f"{short_addr(w.address)}   (toucher pour copier)", size_hint=(1, None), height=dp(30),
-            bg=CLEAR, fg=MUTED, bold=False, font_size=sp(11), halign="left",
-        )
-        addr_btn.bind(size=lambda b, _s: setattr(b, "text_size", (b.width, None)))
-
-        def copy_addr(_b, a=w.address, btn=addr_btn):
-            Clipboard.copy(a)
-            btn.text = f"{short_addr(a)}   (adresse copiée)"
-        addr_btn.bind(on_release=copy_addr)
-        body.add_widget(addr_btn)
         if w.error:
             body.add_widget(WrapLabel(
                 text=f"[color={RED_HEX}]Erreur : {esc(w.error)}[/color]", markup=True, font_size=sp(12),

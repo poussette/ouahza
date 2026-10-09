@@ -5,7 +5,7 @@ config format directly instead of pointing at a file on disk)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.16"
+__version__ = "0.1.17"
 
 
 
@@ -13,6 +13,7 @@ __version__ = "0.1.16"
 
 
 import json
+import time
 import csv
 import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -154,7 +155,32 @@ def fetch_all(
             done += 1
             if on_progress:
                 on_progress(done, len(entries))
+    _retry_transient(results, entries)
     return results
+
+
+#: wallets that failed on a passing problem (rate limit, timeout, server hiccup)
+#: get one more try once the burst is over. Bad addresses are not retried.
+RETRY_PASS_DELAY = 4.0
+_TRANSIENT_MARKERS = ("429", "http 5", "timed out", "timeout", "connection", "temporar", "reset by peer")
+
+
+def _is_transient(error: str | None) -> bool:
+    low = (error or "").lower()
+    return any(m in low for m in _TRANSIENT_MARKERS)
+
+
+def _retry_transient(results, entries) -> None:
+    todo = [i for i, w in enumerate(results) if w is not None and w.error and _is_transient(w.error)]
+    if not todo:
+        return
+    time.sleep(RETRY_PASS_DELAY)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {pool.submit(resolve_wallet, *entries[i]): i for i in todo}
+        for future in as_completed(futures):
+            new = future.result()
+            if not new.error:
+                results[futures[future]] = new
 
 
 # ------------------------------------------------- last report kept on the phone

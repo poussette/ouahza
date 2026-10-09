@@ -25,7 +25,7 @@ address, its platform id to TOKEN_PLATFORM_IDS.
 
 from __future__ import annotations
 
-__version__ = "0.1.16"
+__version__ = "0.1.17"
 
 
 
@@ -401,6 +401,12 @@ def _price_lp(tok: TokenBalance, lp: dict, usd_eur_rate: float | None) -> None:
     tok.name = f"{tok.name} · LP valorisé via {lp['adapter']}"[:300]
 
 
+#: seconds the xExchange price list waits before being prefetched: the first
+#: wave of wallet requests goes to the same host and gets the room first.
+#: apply_pricing fetches it itself if it needs it sooner (single-flight).
+MEX_PREFETCH_DELAY = 6.0
+
+
 def prefetch(chain_ids: set[str]) -> None:
     """Warm the price cache in the background (fire and forget) while the
     wallets are still being read: native prices, the FX rate and, when a
@@ -414,11 +420,16 @@ def prefetch(chain_ids: set[str]) -> None:
         except Exception:  # noqa: BLE001 - purely an optimisation
             pass
 
+    def _delayed(delay, fn):
+        if delay > 0:
+            time.sleep(delay)
+        fn()
+
     pool = ThreadPoolExecutor(max_workers=3)
     pool.submit(_safe, _fetch_native_prices, chain_ids)
     if "multiversx" in chain_ids:
         pool.submit(_safe, _fetch_usd_eur_rate)
-        pool.submit(_safe, _fetch_mex_tokens_prices)
+        pool.submit(_safe, _delayed, MEX_PREFETCH_DELAY, _fetch_mex_tokens_prices)
     pool.shutdown(wait=False)
 
 

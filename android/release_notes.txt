@@ -1,1 +1,1 @@
-v0.1.16: Le ralentissement après erreur 429 se résorbe en 1 minute ; 3 nouveaux essais au lieu de 2.
+v0.1.17: Actualisation plus fiable au lancement (démarrage prudent, nouvelle tentative des wallets en échec passager), prix LP gardés 5 min, récap par type déplacé dans le label déplié, copie d'adresse depuis l'en-tête du wallet.

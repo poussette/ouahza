@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.16"
+__version__ = "0.1.17"
 
 
 
@@ -90,7 +90,7 @@ MAX_RETRY_AFTER = 10.0
 #: (api.multiversx.com answers 429 when 24 wallets fire ~7 calls each at once).
 THROTTLE_ENABLED = True
 MIN_INTERVAL = {
-    "api.multiversx.com": 0.25,
+    "api.multiversx.com": 0.3,
     "gateway.multiversx.com": 0.15,
     "api.coingecko.com": 1.5,
 }
@@ -121,6 +121,19 @@ def _factor(host: str) -> float:
 def _note_429(host: str) -> None:
     with _throttle_lock:
         _penalty[host] = (min(_factor(host) * PENALTY_STEP, PENALTY_MAX), time.monotonic())
+
+
+#: right after the app starts the free APIs see our first burst (prices,
+#: wallets, empty-answer cache still cold): begin gently, the extra caution
+#: eases away by itself like after a 429.
+def warm_start(hosts=("api.multiversx.com",), factor: float = 1.5) -> None:
+    with _throttle_lock:
+        now = time.monotonic()
+        for host in hosts:
+            entry = _penalty.get(host)
+            current = _factor(host) if entry else 1.0
+            if current < factor:
+                _penalty[host] = (factor, now)
 
 
 def reset_penalties() -> None:
