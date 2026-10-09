@@ -29,6 +29,49 @@ def run(data, current="0.9.7", repo=REPO, variant="universal"):
         return updater.check(current, repo, variant), m
 
 
+class FakeRedirect:
+    def __init__(self, location, status=302):
+        self.status_code, self.headers = status, {"Location": location}
+
+    def close(self):
+        pass
+
+
+class TestRateLimitFallback(unittest.TestCase):
+    def go(self, location, current="0.1.17", variant="universal", status=302):
+        from providers.net import HttpError
+        with mock.patch.object(updater, "request_json", side_effect=HttpError("HTTP 403 from api.github.com")), \
+                mock.patch("requests.get", return_value=FakeRedirect(location, status)) as g:
+            return updater.check(current, REPO, variant), g
+
+    def test_api_403_falls_back_to_the_latest_page(self):
+        info, g = self.go(f"https://github.com/{REPO}/releases/tag/v0.1.18")
+        self.assertEqual(info["version"], "0.1.18")
+        self.assertEqual(info["url"], f"https://github.com/{REPO}/releases/download/v0.1.18/Ouahza-0.1.18-universal.apk")
+        self.assertFalse(g.call_args.kwargs["allow_redirects"])
+
+    def test_arm64_variant_and_relative_location(self):
+        info, _ = self.go(f"/{REPO}/releases/tag/v0.1.18", variant="arm64")
+        self.assertTrue(info["url"].endswith("Ouahza-0.1.18-arm64.apk"))
+
+    def test_up_to_date_gives_none(self):
+        info, _ = self.go(f"https://github.com/{REPO}/releases/tag/v0.1.17")
+        self.assertIsNone(info)
+
+    def test_unexpected_answers_are_errors_not_updates(self):
+        from providers.net import HttpError
+        for loc, st in (("https://evil.example/x/releases/tag/v9.9.9", 302), ("", 200),
+                        (f"https://github.com/{REPO}/releases/tag/v9.9.9/../x", 302)):
+            with self.assertRaises(HttpError):
+                self.go(loc, status=st)
+
+    def test_other_errors_are_not_masked(self):
+        from providers.net import HttpError
+        with mock.patch.object(updater, "request_json", side_effect=HttpError("HTTP 500 from api.github.com")):
+            with self.assertRaises(HttpError):
+                updater.check("0.1.17", REPO)
+
+
 class TestUpdater(unittest.TestCase):
     def test_parse(self):
         self.assertEqual(updater.parse_version("v0.9.8"), (0, 9, 8))

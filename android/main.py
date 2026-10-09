@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.20"
+__version__ = "0.1.21"
 
 
 
@@ -61,7 +61,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.20"
+APP_VERSION = "0.1.21"
 
 
 def _version_problems() -> list[str]:
@@ -129,8 +129,6 @@ DEFAULT_SETTINGS = {
     "etherscan_key": "",
     "beacon_key": "",
     "secure_screen": False,
-    "lp_pricing": True,
-    "lp_trust_all": False,
     "check_updates": True,
     "skip_version": "",
     "mvx_gateway": "",
@@ -163,7 +161,7 @@ def sanitize_settings(raw) -> dict:
     gw = raw.get("mvx_gateway")
     if isinstance(gw, str) and (not gw.strip() or validate_rpc_url(gw.strip())):
         out["mvx_gateway"] = gw.strip()[:MAX_KEY_CHARS]  # empty = public default
-    for k in ("secure_screen", "lp_pricing", "lp_trust_all", "check_updates"):
+    for k in ("secure_screen", "check_updates"):
         if isinstance(raw.get(k), bool):
             out[k] = raw[k]
     sv = raw.get("skip_version")
@@ -880,15 +878,29 @@ class OuahzaApp(App):
     def _update_result(self, info, err, manual):
         if err:
             if manual:
-                self.status_label.text = "Mise à jour : vérification impossible (" + clean_text(err, 80) + ")."
+                msg = "Vérification impossible (" + clean_text(err, 80) + ")."
+                self.status_label.text = "Mise à jour : " + msg
+                self._notice("Mise à jour", msg)
             return
         if not info:
             if manual:
-                self.status_label.text = f"Application à jour (v{APP_VERSION})."
+                msg = f"Application à jour (v{APP_VERSION})."
+                self.status_label.text = msg
+                self._notice("Mise à jour", msg)
             return
         if not manual and info["version"] == self.settings.get("skip_version"):
             return
         self._offer_update(info)
+
+    def _notice(self, title, text):
+        """Small message box: the status line is hidden behind the Settings page."""
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
+        box.add_widget(WrapLabel(text=esc(text), markup=True, font_size=sp(13)))
+        ok = RoundedButton(text="OK", bg=ACCENT, fg=BG, size_hint=(1, None), height=dp(46), font_size=sp(14))
+        box.add_widget(ok)
+        popup = self._popup(title, box, size_hint=(0.85, None), height=dp(200))
+        ok.bind(on_release=lambda _b: popup.dismiss())
+        popup.open()
 
     def _download_apk(self, info) -> bool:
         """Download the APK with Android's DownloadManager: progress and a
@@ -1050,47 +1062,26 @@ class OuahzaApp(App):
         ))
         content.add_widget(config_input)
 
-        keys_row = BoxLayout(size_hint=(1, None), height=dp(48), spacing=dp(8))
-        keys_row.add_widget(WrapLabel(text="Clé Etherscan (optionnelle)", size_hint=(0.5, 1), font_size=sp(12)))
-        etherscan_input = style_input(TextInput(
-            text=self.settings.get("etherscan_key", ""), multiline=False, password=True, size_hint=(0.5, 1),
-        ))
-        keys_row.add_widget(etherscan_input)
-        content.add_widget(keys_row)
+        api_btn = RoundedButton(
+            text="Config API  ›", bg=SURFACE2, size_hint=(1, None), height=dp(48), font_size=sp(14),
+        )
+        api_btn.bind(on_release=lambda _b: self.open_api_settings())
+        content.add_widget(api_btn)
 
-        beacon_row = BoxLayout(size_hint=(1, None), height=dp(48), spacing=dp(8))
-        beacon_row.add_widget(WrapLabel(text="Clé beaconcha.in (optionnelle)", size_hint=(0.5, 1), font_size=sp(12)))
-        beacon_input = style_input(TextInput(
-            text=self.settings.get("beacon_key", ""), multiline=False, password=True, size_hint=(0.5, 1),
-        ))
-        beacon_row.add_widget(beacon_input)
-        content.add_widget(beacon_row)
-
-        gw_row = BoxLayout(size_hint=(1, None), height=dp(48), spacing=dp(8))
-        gw_row.add_widget(WrapLabel(text="Gateway API MultiversX (vide = public)", size_hint=(0.5, 1), font_size=sp(12)))
-        gw_input = style_input(TextInput(
-            text=self.settings.get("mvx_gateway", ""), multiline=False, size_hint=(0.5, 1),
-            hint_text="https://gateway.multiversx.com",
-        ))
-        gw_row.add_widget(gw_input)
-        content.add_widget(gw_row)
-
-        lp_row = BoxLayout(size_hint=(1, None), height=dp(52), spacing=dp(8))
-        lp_checkbox = CheckBox(active=self.settings.get("lp_pricing", True), size_hint=(None, 1), width=dp(44))
-        lp_row.add_widget(lp_checkbox)
-        lp_row.add_widget(WrapLabel(
-            text="Valoriser les LP tokens via les contrats (plus lent)", size_hint=(1, 1), font_size=sp(12),
-        ))
-        content.add_widget(lp_row)
-
-        trust_row = BoxLayout(size_hint=(1, None), height=dp(64), spacing=dp(8))
-        trust_checkbox = CheckBox(active=self.settings.get("lp_trust_all", False), size_hint=(None, 1), width=dp(44))
-        trust_row.add_widget(trust_checkbox)
-        trust_row.add_widget(WrapLabel(
-            text="Mode permissif LP : valoriser aussi les pools dont le code est inconnu (moins sûr)",
-            size_hint=(1, 1), font_size=sp(12),
-        ))
-        content.add_widget(trust_row)
+        # Apparaît seulement quand au moins un contrat LP a été approuvé.
+        try:
+            from providers import lp as _lp
+            _lp.set_cache_path(os.path.join(self.user_data_dir, "lp_cache.json"))
+            n_approved = len(_lp.approved_contracts())
+        except Exception:  # noqa: BLE001
+            n_approved = 0
+        if n_approved:
+            rev_btn = RoundedButton(
+                text=f"Contrats LP approuvés ({n_approved})  ›", bg=SURFACE2,
+                size_hint=(1, None), height=dp(48), font_size=sp(14),
+            )
+            rev_btn.bind(on_release=lambda _b: self.open_approved_contracts())
+            content.add_widget(rev_btn)
 
         secure_row = BoxLayout(size_hint=(1, None), height=dp(52), spacing=dp(8))
         secure_checkbox = CheckBox(active=self.settings.get("secure_screen", False), size_hint=(None, 1), width=dp(44))
@@ -1130,25 +1121,196 @@ class OuahzaApp(App):
         def do_save(_btn):
             self.save_settings({
                 "config_text": config_input.text,
-                "etherscan_key": etherscan_input.text.strip(),
-                "beacon_key": beacon_input.text.strip(),
+                "etherscan_key": self.settings.get("etherscan_key", ""),
+                "beacon_key": self.settings.get("beacon_key", ""),
+                "mvx_gateway": self.settings.get("mvx_gateway", ""),
                 "secure_screen": secure_checkbox.active,
-                "lp_pricing": lp_checkbox.active,
-                "lp_trust_all": trust_checkbox.active,
                 "check_updates": upd_checkbox.active,
                 "skip_version": self.settings.get("skip_version", ""),
-                "mvx_gateway": gw_input.text.strip(),
             })
-            gw_rejected = bool(gw_input.text.strip()) and not self.settings.get("mvx_gateway")
             self._apply_secure_screen(self.settings["secure_screen"])
             popup.dismiss()
-            self.status_label.text = (
-                "Gateway API MultiversX ignorée (https:// requis) ; le reste est enregistré."
-                if gw_rejected else "Configuration enregistrée. Appuie sur Actualiser."
-            )
+            self.status_label.text = "Configuration enregistrée. Appuie sur Actualiser."
 
         save_btn.bind(on_release=do_save)
         cancel_btn.bind(on_release=lambda _b: popup.dismiss())
+        popup.open()
+
+    def open_api_settings(self):
+        """Dedicated page: API keys and the MultiversX gateway. Saved on its own."""
+        content = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+
+        def row(label, text, password=False, hint=""):
+            r = BoxLayout(size_hint=(1, None), height=dp(52), spacing=dp(8))
+            r.add_widget(WrapLabel(text=label, size_hint=(0.45, 1), font_size=sp(12)))
+            ti = style_input(TextInput(
+                text=text, multiline=False, password=password, size_hint=(0.55, 1), hint_text=hint,
+            ))
+            r.add_widget(ti)
+            content.add_widget(r)
+            return ti
+
+        content.add_widget(WrapLabel(
+            text="Ces clés restent sur le téléphone (fichier privé de l'app) et ne servent qu'aux services concernés.",
+            min_height=dp(30), font_size=sp(12), color=MUTED,
+        ))
+        etherscan = row("Clé Etherscan (optionnelle)", self.settings.get("etherscan_key", ""), password=True)
+        beacon = row("Clé beaconcha.in (optionnelle)", self.settings.get("beacon_key", ""), password=True)
+        gateway = row(
+            "Gateway API MultiversX (vide = public)", self.settings.get("mvx_gateway", ""),
+            hint="https://gateway.multiversx.com",
+        )
+        content.add_widget(Widget())
+        buttons = BoxLayout(size_hint=(1, None), height=dp(52), spacing=dp(8))
+        cancel = RoundedButton(text="Annuler", bg=SURFACE2, font_size=sp(15))
+        save = RoundedButton(text="Enregistrer", bg=ACCENT, fg=BG, font_size=sp(15))
+        buttons.add_widget(cancel)
+        buttons.add_widget(save)
+        content.add_widget(buttons)
+        popup = self._popup("Config API", content, size_hint=(0.95, None), height=dp(420))
+
+        def do_save(_b):
+            new = dict(self.settings)
+            new.update({
+                "etherscan_key": etherscan.text.strip(),
+                "beacon_key": beacon.text.strip(),
+                "mvx_gateway": gateway.text.strip(),
+            })
+            self.save_settings(new)
+            rejected = bool(gateway.text.strip()) and not self.settings.get("mvx_gateway")
+            popup.dismiss()
+            self.status_label.text = (
+                "Gateway API MultiversX ignorée (https:// requis) ; le reste est enregistré."
+                if rejected else "Config API enregistrée. Appuie sur Actualiser."
+            )
+
+        save.bind(on_release=do_save)
+        cancel.bind(on_release=lambda _b: popup.dismiss())
+        popup.open()
+
+    # ------------------------------------------------------ LP à approuver
+
+    def open_approved_contracts(self):
+        from providers import lp as _lp
+        items = _lp.approved_contracts()
+        content = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8), size_hint=(1, None))
+        content.bind(minimum_height=content.setter("height"))
+        content.add_widget(WrapLabel(
+            text=(
+                "Codes de contrat que tu as approuvés : les pools qui les utilisent sont valorisés. "
+                "Révoquer un code le retire pour de bon (effet à la prochaine actualisation)."
+            ),
+            font_size=sp(12), color=MUTED,
+        ))
+
+        def revoke(code_hash, card):
+            if _lp.revoke_approval(code_hash):
+                content.remove_widget(card)
+                self.status_label.text = "Approbation révoquée. Appuie sur Actualiser."
+
+        if not items:
+            content.add_widget(WrapLabel(text="Aucun contrat approuvé.", font_size=sp(13)))
+        for e in items:
+            card = Panel(bg=SURFACE2, radius=dp(12), padding=(dp(12), dp(8), dp(12), dp(8)), spacing=dp(4))
+            card.add_widget(WrapLabel(text=f"[b]{esc(e['adapter'])}[/b]", markup=True, font_size=sp(13)))
+            card.add_widget(WrapLabel(
+                text=f"code {esc(short_addr(e['code_hash']))}", font_size=sp(11), color=MUTED,
+            ))
+            btn = RoundedButton(
+                text="Révoquer", bg=SURFACE, fg=TEXT, size_hint=(1, None), height=dp(42), font_size=sp(13),
+            )
+            btn.bind(on_release=lambda _b, h=e["code_hash"], c=card: revoke(h, c))
+            card.add_widget(btn)
+            content.add_widget(card)
+        close = RoundedButton(text="Fermer", bg=SURFACE2, size_hint=(1, None), height=dp(46), font_size=sp(14))
+        content.add_widget(close)
+        scroll = ScrollView(do_scroll_x=False, bar_width=dp(4), bar_color=(1, 1, 1, 0.3))
+        scroll.add_widget(content)
+        popup = self._popup("Contrats LP approuvés", scroll, size_hint=(0.95, 0.7))
+        close.bind(on_release=lambda _b: popup.dismiss())
+        popup.open()
+
+    def _pending_pools(self):
+        try:
+            from providers import lp as _lp
+            return _lp.pending_approvals()
+        except Exception:  # noqa: BLE001
+            return []
+
+    def _add_pending_banner(self, box):
+        pending = self._pending_pools()
+        if not pending:
+            return
+        n = len(pending)
+        card = TapCard(
+            orientation="horizontal", size_hint=(1, None), height=dp(52), bg=SURFACE,
+            padding=(dp(14), dp(6), dp(12), dp(6)), spacing=dp(10), radius=dp(12),
+        )
+        card.add_widget(mk_label(
+            f"[color={ORANGE_HEX}]{n} pool{'s' if n > 1 else ''} LP à approuver pour {'être valorisés' if n > 1 else 'être valorisé'}[/color]",
+            size=13, markup=True,
+        ))
+        card.add_widget(Chevron())
+        card.bind(on_release=lambda *_a: self.open_pending_pools())
+        box.add_widget(card)
+
+    def open_pending_pools(self):
+        pending = self._pending_pools()
+        if not pending:
+            return
+        held: dict = {}
+        for w in (self.last_results or []):
+            for t in w.tokens:
+                if t.contract:
+                    held[t.contract] = held.get(t.contract, 0.0) + (t.amount or 0.0)
+        content = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8), size_hint=(1, None))
+        content.bind(minimum_height=content.setter("height"))
+        content.add_widget(WrapLabel(
+            text=(
+                "Les chiffres de ces pools sont cohérents avec la blockchain, mais leur code de contrat "
+                "ne fait pas partie des modèles connus : rien ne prouve qu'il soit honnête. "
+                "En approuvant, tous les pools ayant exactement ce code sont valorisés, "
+                "et ton choix est mémorisé pour les prochaines fois."
+            ),
+            font_size=sp(12), color=MUTED,
+        ))
+        popup_holder = {}
+
+        def approve(lp_id):
+            from providers import lp as _lp
+            ok = _lp.approve_pending(lp_id)
+            popup_holder["p"].dismiss()
+            if ok:
+                self.status_label.text = "Pool approuvé : actualisation en cours..."
+                if not self.running:
+                    self.on_run(None)
+            else:
+                self.status_label.text = "Approbation impossible (pool introuvable ou liste pleine)."
+
+        for e in pending:
+            amount = held.get(e["lp"])
+            est = f" · ma position ≈ {fmt_usd(amount * e['unit_usd'])}" if amount else ""
+            card = Panel(bg=SURFACE2, radius=dp(12), padding=(dp(12), dp(8), dp(12), dp(8)), spacing=dp(4))
+            card.add_widget(WrapLabel(
+                text=f"[b]{esc(e['lp'])}[/b]", markup=True, font_size=sp(13),
+            ))
+            card.add_widget(WrapLabel(
+                text=(f"{esc(e['adapter'])}{est}\ncode {esc(short_addr(e['code_hash']))}"),
+                font_size=sp(11), color=MUTED,
+            ))
+            btn = RoundedButton(
+                text="Approuver ce contrat", bg=ACCENT, fg=BG, size_hint=(1, None), height=dp(44), font_size=sp(13),
+            )
+            btn.bind(on_release=lambda _b, i=e["lp"]: approve(i))
+            card.add_widget(btn)
+            content.add_widget(card)
+        close = RoundedButton(text="Fermer", bg=SURFACE2, size_hint=(1, None), height=dp(46), font_size=sp(14))
+        content.add_widget(close)
+        scroll = ScrollView(do_scroll_x=False, bar_width=dp(4), bar_color=(1, 1, 1, 0.3))
+        scroll.add_widget(content)
+        popup = self._popup("Pools LP à approuver", scroll, size_hint=(0.95, 0.85))
+        popup_holder["p"] = popup
+        close.bind(on_release=lambda _b: popup.dismiss())
         popup.open()
 
     def open_export(self, _instance):
@@ -1219,8 +1381,10 @@ class OuahzaApp(App):
             os.environ["ETHERSCAN_API_KEY"] = self.settings.get("etherscan_key", "") or ""
             os.environ["BEACONCHAIN_API_KEY"] = self.settings.get("beacon_key", "") or ""
             os.environ["MULTIVERSX_GATEWAY_URL"] = self.settings.get("mvx_gateway", "") or ""
-            os.environ["WALLET_LP_PRICING"] = "1" if self.settings.get("lp_pricing", True) else "0"
-            os.environ["WALLET_LP_TRUST_ALL"] = "1" if self.settings.get("lp_trust_all", False) else "0"
+            # Valorisation des LP toujours active ; un contrat inconnu n'est valorisé qu'après
+            # approbation explicite (bannière « pools LP à approuver »), jamais en mode permissif.
+            os.environ["WALLET_LP_PRICING"] = "1"
+            os.environ["WALLET_LP_TRUST_ALL"] = "0"
 
             def progress(done, total):
                 Clock.schedule_once(
@@ -1363,6 +1527,7 @@ class OuahzaApp(App):
             text=sub, markup=True, color=MUTED, font_size=sp(13),
         ))
         box.add_widget(hero)
+        self._add_pending_banner(box)
 
         # Group wallets by label (config order), then sort groups by value.
         groups: dict = {}

@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.20"
+__version__ = "0.1.21"
 
 
 
@@ -61,6 +61,9 @@ MAX_LP_TOKENS = 80
 MAX_PASSES = 3                # a new budget per pass, same run
 LP_WORKERS = 2                # LP tokens examined side by side (gateway and API are throttled separately)
 FAIL_TTL = 86400              # seconds an unrecognised LP is skipped
+#: version of the "unreadable LP" verdicts in the cache file: verdicts of an older
+#: version (some were wrongly written during rate-limit storms) are dropped.
+FAIL_FORMAT = 2
 MAX_CACHE_ENTRIES = 2000
 MAX_CACHE_BYTES = 500_000
 MAX_VM_CALLS = 1000
@@ -331,7 +334,46 @@ def _persist_tokens(lp: str, sc: str) -> None:
         _CACHE.put_tokens(lp, sc, toks)
 
 
+#: pools that answered coherently and pass every on-chain check, but whose
+#: contract code is not a known one and which could not be valued because of
+#: that: {lp id: {"lp", "adapter", "code_hash", "unit_usd"}}. The app offers
+#: them to the user; approving one remembers its code hash for good.
+PENDING: dict[str, dict] = {}
+
+
+def pending_approvals() -> list[dict]:
+    return [dict(v) for v in PENDING.values()]
+
+
+def approve_pending(lp: str) -> bool:
+    """The user approves the contract code behind `lp`: remembered in the cache
+    file, so every pool with that same code is valued from now on."""
+    entry = PENDING.get(lp)
+    if not entry or not _CACHE.add_trusted(entry["code_hash"], entry["adapter"]):
+        return False
+    for key in [k for k, v in PENDING.items()
+                if v["code_hash"] == entry["code_hash"] and v["adapter"] == entry["adapter"]]:
+        PENDING.pop(key, None)
+    _CACHE.save()
+    return True
+
+
+def approved_contracts() -> list[dict]:
+    """Contract codes the user approved (kept in the cache file across restarts)."""
+    return [{"code_hash": h, "adapter": a} for h, a in sorted(_CACHE.trusted.items(), key=lambda kv: kv[1])]
+
+
+def revoke_approval(code_hash: str) -> bool:
+    if _CACHE.trusted.pop(code_hash, None) is None:
+        return False
+    _CACHE.dirty = True
+    _PRICES.clear()        # LP prices already computed carried the "approved" label
+    _CACHE.save()
+    return True
+
+
 def clear_runtime_caches() -> None:
+    PENDING.clear()
     _PRICES.clear()
     _POOL_TOKENS.clear()
     _FACTS_BATCH.clear()
@@ -401,8 +443,14 @@ def candidate_contracts(lp: str, facts: dict) -> list[str]:
     out: list[str] = []
     try:
         roles = request_json("GET", f"{MVX_API}/tokens/{quote(lp, safe='')}/roles")
-    except HttpError:
-        roles = None  # endpoint absent for this token: the issuer is still tried
+    except HttpError as exc:
+        # Only "this token has no such endpoint" (a plain 4xx) is an answer. A rate
+        # limit or a server hiccup must propagate: reading it as "no pool" would
+        # get this LP marked unreadable for a whole day.
+        if re.match(r"HTTP 4\d\d ", str(exc)) and not str(exc).startswith("HTTP 429"):
+            roles = None  # endpoint absent for this token: the issuer is still tried
+        else:
+            raise
     for r in roles if isinstance(roles, list) else []:
         if not isinstance(r, dict):
             continue
@@ -562,7 +610,7 @@ class LPCache:
                 self.trusted[h] = spec
         # "unreadable" verdicts only hold for the adapter set that produced them
         fails = doc.get("fail")
-        if doc.get("sig") == _adapter_signature() and isinstance(fails, dict):
+        if doc.get("sig") == _adapter_signature() and doc.get("failv") == FAIL_FORMAT and isinstance(fails, dict):
             now = time.time()
             for lp, ts in fails.items():
                 if (
@@ -619,7 +667,7 @@ class LPCache:
     def save(self) -> None:
         if not self.path or not self.dirty:
             return
-        data = json.dumps({"v": 1, "sig": _adapter_signature(), "pools": self.pools,
+        data = json.dumps({"v": 1, "sig": _adapter_signature(), "failv": FAIL_FORMAT, "pools": self.pools,
                            "fail": self.fail, "trusted": self.trusted})
         try:
             os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
@@ -920,6 +968,23 @@ def _global_exhausted(budget: Budget) -> bool:
     return budget.calls <= 0 or time.monotonic() > budget.deadline
 
 
+def _note_pending(lp: str, facts: dict, st: PoolState, infos: dict) -> None:
+    """Remember a pool that would be valued if its contract code were trusted."""
+    if st.trust is not None or not st.code_hash:
+        return
+    probe = PoolState(st.adapter, st.reserves, st.curve, True, st.from_balances, st.virtual_price)
+    detail = pool_value_detail(probe, infos)
+    if detail is None:
+        return
+    try:
+        supply = facts["supply_raw"] / (10 ** facts["decimals"])
+        price = detail[0] / supply if supply > 0 else None
+    except (OverflowError, ZeroDivisionError):
+        return
+    if price and math.isfinite(price) and price > 0 and not _vp_mismatch(st, infos, price):
+        PENDING[lp] = {"lp": lp, "adapter": st.adapter, "code_hash": st.code_hash, "unit_usd": price}
+
+
 def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dict[str, dict]:
     # `candidates` should be ordered most-valuable-first (the per-run limits
     # then spare the real positions, not the alphabetically early spam).
@@ -1008,6 +1073,7 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
     for lp, facts, st in found:
         detail = pool_value_detail(st, infos)
         if detail is None:
+            _note_pending(lp, facts, st, infos)
             continue
         value, estimated = detail
         try:
@@ -1028,6 +1094,7 @@ def price_lp_tokens(candidates: list[str], fetch_infos, on_progress=None) -> dic
             elif not st.verified:
                 label += ", contrat non vérifié"
             out[lp] = {"usd": price, "adapter": label, "supply": supply}
+            PENDING.pop(lp, None)
             _PRICES[lp] = (time.monotonic(), dict(out[lp]))
     stats["valued"] = len(out)
     return out
