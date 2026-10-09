@@ -1,1 +1,1 @@
-v0.1.24: Les prix des LP sont conservés 5 min même après un arrêt-relance
+v0.1.25: Pas de nouvelle actualisation si la dernière date de moins d’une minute
