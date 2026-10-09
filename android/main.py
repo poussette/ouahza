@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.21"
+__version__ = "0.1.22"
 
 
 
@@ -61,7 +61,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.21"
+APP_VERSION = "0.1.22"
 
 
 def _version_problems() -> list[str]:
@@ -1722,10 +1722,11 @@ class OuahzaApp(App):
         )
         chev = Chevron()
         card.add_widget(Dot(CHAIN_COLORS.get(w.chain, OTHER_COLOR), size=8))
-        card.add_widget(mk_label(
-            f"[b]{esc(w.chain)}[/b]", size=13, markup=True, size_hint=(None, 1), width=dp(84),
-        ))
-        card.add_widget(AddrCopy(w.address, chev))
+        # Two lines (chain, then the short address) so the address never wraps on a narrow phone.
+        ident = BoxLayout(orientation="vertical", size_hint=(1, 1))
+        ident.add_widget(mk_label(f"[b]{esc(w.chain)}[/b]", size=13, markup=True, size_hint=(1, 0.55)))
+        ident.add_widget(AddrCopy(w.address, chev, size_hint=(1, 0.45)))
+        card.add_widget(ident)
         if w.error:
             total = f"[color={RED_HEX}]erreur[/color]"
         else:

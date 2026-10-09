@@ -1,1 +1,1 @@
-v0.1.21: Valorisation des LP toujours active, approbation des contrats inconnus (révocable dans les Paramètres), page Config API, un LP n’est plus ignoré après une limite d’appels, vérification de mise à jour sans limite, garde-fou de version.
+v0.1.22: En-tête de wallet sur deux lignes : l’adresse raccourcie ne passe plus à la ligne.
