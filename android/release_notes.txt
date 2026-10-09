@@ -1,1 +1,1 @@
-v0.1.18: Valorisation des LP toujours active, approbation des contrats LP inconnus depuis l’app (mémorisée), clés et API regroupées sur une page dédiée,révocation des contrats approuvés dans les Paramètres
+v0.1.19: Valorisation des LP toujours active, approbation des contrats LP inconnus depuis l'app (mémorisée, révocable dans les Paramètres), page « Config API », mise à jour : repli sans limite quand l'API GitHub est saturée et résultat de la vérification affiché dans une fenêtre.
