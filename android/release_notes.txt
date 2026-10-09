@@ -1,1 +1,1 @@
-v0.1.25: Pas de nouvelle actualisation si la dernière date de moins d’une minute
+v0.1.26: Au démarrage, la mise à jour est proposée avant le traitement. Pas d’actualisation tant que la fenêtre est ouverte ou que la mise à jour est lancée

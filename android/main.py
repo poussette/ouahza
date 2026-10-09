@@ -14,13 +14,14 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.25"
+__version__ = "0.1.26"
 
 
 
 
 
 
+import hashlib
 import os
 import re
 import json
@@ -61,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.25"
+APP_VERSION = "0.1.26"
 
 
 def _version_problems() -> list[str]:
@@ -659,6 +660,8 @@ class OuahzaApp(App):
         Window.clearcolor = BG
         self.running = False
         self.last_results = None
+        self._fresh = None
+        self._gate_open = False
         self.last_text = ""
         self.settings_path = os.path.join(self.user_data_dir, SETTINGS_FILENAME)
         self.settings = self.load_settings()
@@ -835,19 +838,74 @@ class OuahzaApp(App):
     def _report_path(self):
         return os.path.join(self.user_data_dir, "last_report.json")
 
-    def _save_last_report(self, results, priced_ok):
+    # Une actualisation de moins de FRESH_SECONDS n'est pas refaite (bouton ou arrêt-relance).
+    FRESH_SECONDS = 60.0
+    FAKE_REFRESH_SECONDS = 2.0
+
+    def _cfg_sig(self):
+        """Empreinte de ce qui détermine le rapport (adresses, clés, passerelle) : jamais écrite en clair."""
+        raw = "\n".join(str(self.settings.get(k, "") or "") for k in
+                        ("config_text", "etherscan_key", "beacon_key", "mvx_gateway"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _meta_path(self):
+        return os.path.join(self.user_data_dir, "last_report.meta")
+
+    def _save_last_report(self, results, priced_ok, complete=True):
+        now = time.time()
         try:
             tmp = self._report_path() + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                f.write(report.dump_results(results, priced_ok, time.time()))
+                f.write(report.dump_results(results, priced_ok, now))
             os.replace(tmp, self._report_path())
         except Exception:  # noqa: BLE001 - never block the app for a cache
+            return
+        self._fresh = {"at": now, "sig": self._cfg_sig(), "ok": bool(priced_ok and complete)}
+        try:
+            with open(self._meta_path(), "w", encoding="utf-8") as f:
+                json.dump(self._fresh, f)
+        except Exception:  # noqa: BLE001
             pass
+
+    def _load_fresh_meta(self):
+        try:
+            with open(self._meta_path(), encoding="utf-8") as f:
+                m = json.load(f)
+            if isinstance(m, dict) and isinstance(m.get("at"), (int, float)) and isinstance(m.get("sig"), str):
+                self._fresh = {"at": float(m["at"]), "sig": m["sig"], "ok": bool(m.get("ok"))}
+        except Exception:  # noqa: BLE001
+            self._fresh = None
+
+    def _fresh_age(self):
+        """Âge (s) du dernier rapport complet s'il est encore valable pour la configuration actuelle, sinon None."""
+        f = getattr(self, "_fresh", None)
+        if not f or not f.get("ok") or f.get("sig") != self._cfg_sig() or not self.last_results:
+            return None
+        age = time.time() - f["at"]
+        return age if 0 <= age < self.FRESH_SECONDS else None
+
+    def _fake_refresh(self, age):
+        """Rapport déjà à jour : on n'interroge personne, l'animation dure 2 s pour la forme."""
+        self.running = True
+        self.run_btn.disabled = True
+        self.run_btn.text = "Chargement   "
+        self._busy_start()
+
+        def done(_dt):
+            self.running = False
+            self._busy_stop()
+            self.run_btn.disabled = False
+            self.run_btn.text = "Actualiser"
+            self.export_btn.disabled = False
+            self.status_label.text = f"Données déjà à jour (actualisées il y a {int(age)} s) · {len(self.last_results)} wallet(s)"
+
+        Clock.schedule_once(done, self.FAKE_REFRESH_SECONDS)
 
     def _load_last_report(self):
         """Affiche tout de suite les dernières données enregistrées (avant toute requête)."""
         if not self.settings.get("config_text", "").strip():
             return
+        self._load_fresh_meta()
         try:
             with open(self._report_path(), encoding="utf-8") as f:
                 loaded = report.load_results(f.read())
@@ -878,14 +936,37 @@ class OuahzaApp(App):
         # Une configuration existe : l'actualisation démarre toute seule (le dernier
         # rapport reste affiché pendant ce temps).
         try:
-            if report.parse_input_text(self.settings.get("config_text", "")):
-                Clock.schedule_once(lambda dt: self.on_run(None), 0.3)
+            auto = bool(report.parse_input_text(self.settings.get("config_text", "")))
         except ValueError:
-            pass
-        if self.settings.get("check_updates", True):
+            auto = False
+        check = self.settings.get("check_updates", True)
+        if auto and check:
+            # La mise à jour d'abord : pas de traitement tant que la vérification n'a pas répondu
+            # (au plus GATE_TIMEOUT s), que la fenêtre de mise à jour est ouverte ou qu'elle est lancée.
+            self._gate_open = True
+            self._gate_timer = Clock.schedule_once(lambda dt: self._gate_release(True), self.GATE_TIMEOUT)
+            Clock.schedule_once(lambda dt: self.check_update(manual=False, gate=True), 0.2)
+            return
+        if auto:
+            Clock.schedule_once(lambda dt: self.on_run(None), 0.3)
+        if check:
             Clock.schedule_once(lambda dt: self.check_update(manual=False), 2.0)
 
-    def check_update(self, manual=False):
+    GATE_TIMEOUT = 8.0
+
+    def _gate_release(self, run):
+        """Fin de l'attente de la mise à jour au démarrage ; run=True lance alors l'actualisation automatique."""
+        if not getattr(self, "_gate_open", False):
+            return
+        self._gate_open = False
+        timer = getattr(self, "_gate_timer", None)
+        if timer is not None:
+            timer.cancel()
+            self._gate_timer = None
+        if run:
+            Clock.schedule_once(lambda dt: self.on_run(None), 0)
+
+    def check_update(self, manual=False, gate=False):
         """Ask GitHub for a newer release (background thread, never blocks the UI)."""
         if manual:
             self.status_label.text = "Recherche de mise à jour..."
@@ -897,10 +978,12 @@ class OuahzaApp(App):
                 info = updater.check(APP_VERSION, variant=detect_variant())
             except Exception as exc:  # noqa: BLE001 - offline/rate limit: stay silent unless asked
                 err = safe_error(exc) or exc.__class__.__name__
-            Clock.schedule_once(lambda dt: self._update_result(info, err, manual))
+            Clock.schedule_once(lambda dt: self._update_result(info, err, manual, gate))
         threading.Thread(target=work, daemon=True).start()
 
-    def _update_result(self, info, err, manual):
+    def _update_result(self, info, err, manual, gate=False):
+        if gate and (err or not info or (not manual and info["version"] == self.settings.get("skip_version"))):
+            self._gate_release(True)       # rien à proposer : le traitement démarre
         if err:
             if manual:
                 msg = "Vérification impossible (" + clean_text(err, 80) + ")."
@@ -915,7 +998,7 @@ class OuahzaApp(App):
             return
         if not manual and info["version"] == self.settings.get("skip_version"):
             return
-        self._offer_update(info)
+        self._offer_update(info, gate)
 
     def _notice(self, title, text):
         """Small message box: the status line is hidden behind the Settings page."""
@@ -1024,7 +1107,7 @@ class OuahzaApp(App):
         import webbrowser
         webbrowser.open(url)
 
-    def _offer_update(self, info):
+    def _offer_update(self, info, gate=False):
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
         notes = info.get("notes") or ""
         text = (
@@ -1043,6 +1126,13 @@ class OuahzaApp(App):
         box.add_widget(row)
         popup = self._popup("Mise à jour disponible", box, size_hint=(0.92, None), height=dp(300))
 
+        if gate and getattr(self, "_gate_timer", None) is not None:
+            self._gate_timer.cancel()      # la réponse est arrivée : plus de délai, la fenêtre décide
+            self._gate_timer = None
+        if gate:
+            # tant que la fenêtre est ouverte, pas de traitement ; fermée sans lancer la mise à jour -> il démarre
+            popup.bind(on_dismiss=lambda *_a: self._gate_release(True))
+
         def do_skip(_b):
             data = dict(self.settings)
             data["skip_version"] = info["version"]
@@ -1050,6 +1140,7 @@ class OuahzaApp(App):
             popup.dismiss()
 
         def do_go(_b):
+            self._gate_release(False)      # mise à jour lancée : pas d'actualisation automatique
             popup.dismiss()
             if self._download_apk(info):
                 self.status_label.text = (
@@ -1372,6 +1463,10 @@ class OuahzaApp(App):
         if not entries:
             self.status_label.text = "Aucune adresse dans la configuration -- ouvre Paramètres pour en coller."
             return
+        age = self._fresh_age()
+        if age is not None:
+            self._fake_refresh(age)
+            return
 
         self.running = True
         self.run_btn.disabled = True
@@ -1477,7 +1572,7 @@ class OuahzaApp(App):
                 report.filter_unpriced(text_results)
                 report.filter_dust(text_results)
             text = report.format_table(text_results)
-            self._save_last_report(results, priced_ok)
+            self._save_last_report(results, priced_ok, complete=report.count_incomplete(results) == 0)
             Clock.schedule_once(lambda dt: self._finish(results, text, None, priced_ok, notes, perf=perf))
         except Exception as exc:
             # Never show a raw traceback: it can embed URLs with API keys.

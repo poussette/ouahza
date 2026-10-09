@@ -7,7 +7,7 @@ of scope here), so `tokens` is always empty.
 
 from __future__ import annotations
 
-__version__ = "0.1.25"
+__version__ = "0.1.26"
 
 
 
