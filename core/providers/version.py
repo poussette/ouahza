@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import importlib
 
-VERSION = "0.1.19"
+VERSION = "0.1.20"
 __version__ = VERSION
 
 #: importable components (the entry script is checked by its caller)
