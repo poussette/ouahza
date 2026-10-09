@@ -175,17 +175,20 @@ class AdaptiveThrottleTests(unittest.TestCase):
     def tearDown(self):
         net.reset_penalties()
 
-    def test_429_slows_the_host_down_then_recovers(self):
+    def test_429_slows_the_host_down_then_recovers_gradually(self):
         self.assertEqual(net._factor("h.test"), 1.0)
         net._note_429("h.test")
-        self.assertEqual(net._factor("h.test"), 1.5)
+        self.assertAlmostEqual(net._factor("h.test"), 1.5, places=2)
         net._note_429("h.test")
-        self.assertEqual(net._factor("h.test"), 2.25)
+        self.assertAlmostEqual(net._factor("h.test"), 2.25, places=2)
         for _ in range(5):
             net._note_429("h.test")
-        self.assertEqual(net._factor("h.test"), net.PENALTY_MAX)
+        self.assertAlmostEqual(net._factor("h.test"), net.PENALTY_MAX, places=2)
         self.assertEqual(net._factor("other.test"), 1.0)        # per host
-        net._penalty["h.test"] = (3.0, time.monotonic() - 1)    # hold elapsed
+        now = time.monotonic()
+        net._penalty["h.test"] = (3.0, now - net.PENALTY_RECOVERY)       # one calm step
+        self.assertAlmostEqual(net._factor("h.test"), 2.0, places=1)
+        net._penalty["h.test"] = (3.0, now - 3 * net.PENALTY_RECOVERY)   # three calm steps
         self.assertEqual(net._factor("h.test"), 1.0)
 
     def test_interval_uses_the_factor(self):

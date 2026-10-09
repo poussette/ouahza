@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.15"
+__version__ = "0.1.16"
 
 
 
@@ -81,7 +81,7 @@ MAX_REDIRECTS = 3
 
 #: transient failures are retried (public APIs rate-limit and flake a lot):
 #: delays in seconds between attempts; () disables retrying.
-RETRY_DELAYS = (1.0, 3.0)
+RETRY_DELAYS = (1.0, 3.0, 6.0)
 _RETRY_STATUS = {429, 502, 503, 504}
 MAX_RETRY_AFTER = 10.0
 
@@ -100,24 +100,27 @@ _next_slot: dict[str, float] = {}
 
 
 #: after an HTTP 429 the host is asked less often: its interval is multiplied
-#: (x1.5 per 429, at most x3) and goes back to normal once PENALTY_HOLD seconds
-#: pass without another 429.
+#: (x1.5 per 429, at most x3) and then eases back by one step (/1.5) for every
+#: PENALTY_RECOVERY seconds without a 429, so a slow-down never lingers into
+#: the next refresh for longer than needed.
 PENALTY_STEP = 1.5
 PENALTY_MAX = 3.0
-PENALTY_HOLD = 120.0
-_penalty: dict[str, tuple[float, float]] = {}   # host -> (factor, valid until)
-
-
-def _note_429(host: str) -> None:
-    with _throttle_lock:
-        factor = _penalty.get(host, (1.0, 0.0))
-        cur = factor[0] if time.monotonic() < factor[1] else 1.0
-        _penalty[host] = (min(cur * PENALTY_STEP, PENALTY_MAX), time.monotonic() + PENALTY_HOLD)
+PENALTY_RECOVERY = 20.0
+_penalty: dict[str, tuple[float, float]] = {}   # host -> (factor at last 429, time of it)
 
 
 def _factor(host: str) -> float:
     entry = _penalty.get(host)
-    return entry[0] if entry and time.monotonic() < entry[1] else 1.0
+    if not entry:
+        return 1.0
+    factor, since = entry
+    calm = max(0.0, time.monotonic() - since)
+    return max(1.0, factor / (PENALTY_STEP ** (calm / PENALTY_RECOVERY)))
+
+
+def _note_429(host: str) -> None:
+    with _throttle_lock:
+        _penalty[host] = (min(_factor(host) * PENALTY_STEP, PENALTY_MAX), time.monotonic())
 
 
 def reset_penalties() -> None:
