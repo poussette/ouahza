@@ -1,1 +1,1 @@
-v0.1.26: Au démarrage, la mise à jour est proposée avant le traitement. Pas d’actualisation tant que la fenêtre est ouverte ou que la mise à jour est lancée
+v0.1.27: application du délai de non-réactualisation de 60s après la toute fin d'un réactualisation.

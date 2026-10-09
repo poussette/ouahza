@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.26"
+__version__ = "0.1.27"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.26"
+APP_VERSION = "0.1.27"
 
 
 def _version_problems() -> list[str]:
@@ -662,6 +662,7 @@ class OuahzaApp(App):
         self.last_results = None
         self._fresh = None
         self._gate_open = False
+        self._why = ""
         self.last_text = ""
         self.settings_path = os.path.join(self.user_data_dir, SETTINGS_FILENAME)
         self.settings = self.load_settings()
@@ -851,21 +852,39 @@ class OuahzaApp(App):
     def _meta_path(self):
         return os.path.join(self.user_data_dir, "last_report.meta")
 
-    def _save_last_report(self, results, priced_ok, complete=True):
-        now = time.time()
+    def _save_last_report(self, results, priced_ok):
         try:
             tmp = self._report_path() + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
-                f.write(report.dump_results(results, priced_ok, now))
+                f.write(report.dump_results(results, priced_ok, time.time()))
             os.replace(tmp, self._report_path())
         except Exception:  # noqa: BLE001 - never block the app for a cache
-            return
-        self._fresh = {"at": now, "sig": self._cfg_sig(), "ok": bool(priced_ok and complete)}
+            pass
+
+    def _mark_done(self, results, priced_ok):
+        """Horodatage de fin d'actualisation, en mémoire ET sur disque. Appelé tout à la fin (résultats
+        affichés, bouton rendu) : c'est de cet instant que partent les 60 s sans nouvelle actualisation."""
+        complete = report.count_incomplete(results) == 0
+        self._fresh = {"at": time.time(), "sig": self._cfg_sig(), "ok": bool(priced_ok and complete),
+                       "why": "" if priced_ok and complete else "rapport précédent incomplet"}
         try:
-            with open(self._meta_path(), "w", encoding="utf-8") as f:
+            tmp = self._meta_path() + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._fresh, f)
+            os.replace(tmp, self._meta_path())
         except Exception:  # noqa: BLE001
             pass
+
+    def _why_rerun(self):
+        """Si le dernier rapport a moins de FRESH_SECONDS mais qu'on actualise quand même : pourquoi (affiché)."""
+        f = getattr(self, "_fresh", None)
+        if not f or not (0 <= time.time() - f["at"] < self.FRESH_SECONDS):
+            return ""
+        if not f.get("ok"):
+            return "rapport précédent incomplet"
+        if f.get("sig") != self._cfg_sig():
+            return "configuration modifiée"
+        return "" if self.last_results else "rapport précédent absent"
 
     def _load_fresh_meta(self):
         try:
@@ -1467,6 +1486,7 @@ class OuahzaApp(App):
         if age is not None:
             self._fake_refresh(age)
             return
+        self._why = self._why_rerun()
 
         self.running = True
         self.run_btn.disabled = True
@@ -1572,7 +1592,7 @@ class OuahzaApp(App):
                 report.filter_unpriced(text_results)
                 report.filter_dust(text_results)
             text = report.format_table(text_results)
-            self._save_last_report(results, priced_ok, complete=report.count_incomplete(results) == 0)
+            self._save_last_report(results, priced_ok)
             Clock.schedule_once(lambda dt: self._finish(results, text, None, priced_ok, notes, perf=perf))
         except Exception as exc:
             # Never show a raw traceback: it can embed URLs with API keys.
@@ -1621,9 +1641,15 @@ class OuahzaApp(App):
             msg += " · " + note
         if VERSION_PROBLEMS:
             msg += " · (!) fichiers d'une autre version : " + clean_text(", ".join(VERSION_PROBLEMS), 150)
+        why = getattr(self, "_why", "")
+        if why and not from_disk:
+            msg += f" · actualisée malgré un rapport récent ({why})"
+        self._why = ""
         self.status_label.text = msg
         self.export_btn.disabled = False
         self.scroll.scroll_y = 1
+        if not from_disk:
+            self._mark_done(results, priced_ok)      # TOUT dernier acte : le délai de 60 s part d'ici
 
     # ---------------------------------------------------------------- results
 
