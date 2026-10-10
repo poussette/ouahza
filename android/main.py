@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.27"
+__version__ = "0.1.28"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.27"
+APP_VERSION = "0.1.28"
 
 
 def _version_problems() -> list[str]:
@@ -663,6 +663,7 @@ class OuahzaApp(App):
         self._fresh = None
         self._gate_open = False
         self._why = ""
+        self._auto_ev = None
         self.last_text = ""
         self.settings_path = os.path.join(self.user_data_dir, SETTINGS_FILENAME)
         self.settings = self.load_settings()
@@ -1610,9 +1611,29 @@ class OuahzaApp(App):
         except Exception:  # noqa: BLE001 - the final render replaces it anyway
             pass
 
+    # Appli ouverte : nouvelle actualisation 30 min après la FIN de la précédente (manuelle ou automatique).
+    AUTO_REFRESH_SECONDS = 1800.0
+
+    def _schedule_auto_refresh(self, delay=None):
+        ev = getattr(self, "_auto_ev", None)
+        if ev is not None:
+            ev.cancel()
+        self._auto_ev = Clock.schedule_once(self._auto_refresh_tick, delay or self.AUTO_REFRESH_SECONDS)
+
+    def _auto_refresh_tick(self, _dt):
+        self._auto_ev = None
+        if self.running:                      # déjà en cours : le prochain délai part de sa fin
+            return
+        if any(isinstance(w, Popup) for w in Window.children):
+            self._schedule_auto_refresh(60.0)  # fenêtre ouverte (réglages, mise à jour...) : on repasse dans 1 min
+            return
+        self.on_run(None)
+
     def _finish(self, results, text, error, priced_ok, notes=(), stamp=None, from_disk=False, perf=""):
         self.running = False
         self._busy_stop()
+        if not from_disk:
+            self._schedule_auto_refresh()     # le délai de 30 min part de la fin de ce traitement
         self.run_btn.disabled = False
         self.run_btn.text = "Actualiser"
         self.results_box.clear_widgets()

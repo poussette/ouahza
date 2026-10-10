@@ -1,1 +1,1 @@
-v0.1.27: application du délai de non-réactualisation de 60s après la toute fin d'un réactualisation.
+v0.1.28: rafraichissement d'actualisation 30mn.

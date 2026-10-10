@@ -10,7 +10,7 @@ and an update over the installed app keeps its private data/settings).
 
 from __future__ import annotations
 
-__version__ = "0.1.27"
+__version__ = "0.1.28"
 
 import re
 
