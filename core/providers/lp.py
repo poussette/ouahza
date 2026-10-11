@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.30"
+__version__ = "0.1.31"
 
 
 
@@ -338,6 +338,13 @@ FACTS_BATCH_TTL = 120.0
 _PRICES: dict[str, tuple[float, dict]] = {}
 _POOL_TOKENS: dict[tuple[str, str], tuple[str, str]] = {}
 _FACTS_BATCH: dict[str, tuple[float, dict]] = {}
+# What rarely changes is not asked again for an hour (fewer calls to the public API):
+#  * _CODE_HASHES: code hash of a pool contract (also saved in the cache file);
+#  * _ROLES      : mint/burn role holders of an LP token (memory only).
+# The supply and balance cross-checks still run on every read.
+SLOW_TTL = 3600.0
+_CODE_HASHES: dict[str, tuple[float, str]] = {}
+_ROLES: dict[str, tuple[float, list]] = {}
 
 
 def _persist_tokens(lp: str, sc: str) -> None:
@@ -397,6 +404,8 @@ def clear_runtime_caches() -> None:
     _PRICES.clear()
     _POOL_TOKENS.clear()
     _FACTS_BATCH.clear()
+    _CODE_HASHES.clear()
+    _ROLES.clear()
 
 
 def _token_facts(lp: str):
@@ -461,6 +470,13 @@ def candidate_contracts(lp: str, facts: dict) -> list[str]:
     """Smart contracts that may be the pool: holders of the LP mint/burn roles,
     then the issuer. (The issuer is often a router/factory, the role holder the pool.)"""
     out: list[str] = []
+    hit = _ROLES.get(lp)
+    if hit is not None and time.monotonic() - hit[0] < SLOW_TTL:
+        out = list(hit[1])
+        facts["role_holders"] = set(out)
+        if facts["owner"] and facts["owner"] not in out:
+            out.append(facts["owner"])
+        return out[:MAX_CANDIDATES]
     try:
         roles = request_json("GET", f"{MVX_API}/tokens/{quote(lp, safe='')}/roles")
     except HttpError as exc:
@@ -481,6 +497,7 @@ def candidate_contracts(lp: str, facts: dict) -> list[str]:
             and addr not in out
         ):
             out.append(addr)
+    _ROLES[lp] = (time.monotonic(), list(out))
     facts["role_holders"] = set(out)
     if facts["owner"] and facts["owner"] not in out:
         out.append(facts["owner"])
@@ -535,11 +552,18 @@ def _within(reserve: int, balance: int) -> bool:
 
 
 def _code_hash(sc: str, budget: Budget) -> str | None:
+    hit = _CODE_HASHES.get(sc)
+    if hit is not None and time.monotonic() - hit[0] < SLOW_TTL:
+        return hit[1]                      # asked less than an hour ago: no call, no budget
     if not budget.spend():
         raise requests.RequestException("LP query budget exhausted")
     d = request_json("GET", f"{MVX_API}/accounts/{quote(sc, safe='')}", params={"fields": "codeHash"})
     h = d.get("codeHash") if isinstance(d, dict) else None
-    return h if isinstance(h, str) and len(h) <= 64 else None
+    h = h if isinstance(h, str) and len(h) <= 64 else None
+    if h:
+        _CODE_HASHES[sc] = (time.monotonic(), h)
+        _CACHE.put_codehash(sc, h)
+    return h
 
 
 def _verify(spec, sc, facts, reserves: dict[str, int], supply: int, budget: Budget,
@@ -581,6 +605,7 @@ def _names_lp(spec, sc, lp, budget, args) -> bool | None:
 
 _ADDR_RE = re.compile(r"erd1[a-z0-9]{58}")
 _HASH_RE = re.compile(r"[A-Za-z0-9+/]{43}=")  # base64 of a sha256
+_HASH_ISH_RE = re.compile(r"[A-Za-z0-9+/=_-]{1,64}")   # a code hash as the API prints it
 
 
 def _adapter_signature() -> str:
@@ -593,6 +618,7 @@ class LPCache:
         self.pools: dict[str, dict] = {}
         self.fail: dict[str, float] = {}
         self.trusted: dict[str, str] = {}   # code hash -> adapter, approved by the user
+        self.hashes: dict[str, dict] = {}   # pool contract -> {ts (wall clock), h}: < SLOW_TTL old
         self.prices: dict[str, dict] = {}   # lp -> {ts (wall clock), usd, adapter, supply}: < LP_PRICE_TTL old
         self.dirty = False
         if path:
@@ -629,8 +655,17 @@ class LPCache:
         for h, spec in (trusted.items() if isinstance(trusted, dict) else ()):
             if len(self.trusted) < 200 and _HASH_RE.fullmatch(str(h)) and spec in names:
                 self.trusted[h] = spec
-        prices = doc.get("prices")
         now_w = time.time()
+        hashes = doc.get("codehashes")
+        for sc, e in (hashes.items() if isinstance(hashes, dict) else ()):
+            if not (isinstance(sc, str) and _ADDR_RE.fullmatch(sc) and isinstance(e, dict)
+                    and len(self.hashes) < MAX_CACHE_ENTRIES):
+                continue
+            ts, h = e.get("ts"), e.get("h")
+            if (isinstance(ts, (int, float)) and not isinstance(ts, bool) and 0 <= now_w - ts < SLOW_TTL
+                    and isinstance(h, str) and 0 < len(h) <= 64 and _HASH_ISH_RE.fullmatch(h)):
+                self.hashes[sc] = {"ts": float(ts), "h": h}
+        prices = doc.get("prices")
         for lp, e in (prices.items() if isinstance(prices, dict) else ()):
             if not (isinstance(lp, str) and _TOKEN_ID_RE.fullmatch(lp) and isinstance(e, dict)
                     and len(self.prices) < MAX_CACHE_ENTRIES):
@@ -699,6 +734,17 @@ class LPCache:
             self.fail[lp] = time.time()
             self.dirty = True
 
+    def put_codehash(self, sc: str, h: str) -> None:
+        if len(self.hashes) < MAX_CACHE_ENTRIES or sc in self.hashes:
+            self.hashes[sc] = {"ts": time.time(), "h": h}
+            self.dirty = True
+
+    def _fresh_hashes(self) -> dict:
+        now = time.time()
+        for sc in [k for k, e in self.hashes.items() if not 0 <= now - e["ts"] < SLOW_TTL]:
+            del self.hashes[sc]
+        return self.hashes
+
     def _fresh_prices(self) -> dict:
         now = time.time()
         for lp in [k for k, e in self.prices.items() if not 0 <= now - e["ts"] < LP_PRICE_TTL]:
@@ -721,7 +767,7 @@ class LPCache:
             return
         data = json.dumps({"v": 1, "sig": _adapter_signature(), "failv": FAIL_FORMAT, "pools": self.pools,
                            "fail": self.fail, "trusted": self.trusted,
-                           "prices": self._fresh_prices()})
+                           "prices": self._fresh_prices(), "codehashes": self._fresh_hashes()})
         try:
             os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
             tmp = f"{self.path}.tmp"
@@ -748,6 +794,8 @@ def set_cache_path(path: str | None) -> None:
         if e.get("tokens"):
             _POOL_TOKENS[(lp, e["sc"])] = tuple(e["tokens"])
     mono, wall = time.monotonic(), time.time()
+    for sc, e in _CACHE.hashes.items():    # code hashes read < 1 h ago by the previous process
+        _CODE_HASHES[sc] = (mono - (wall - e["ts"]), e["h"])
     for lp, e in _CACHE.prices.items():    # prices computed < 5 min ago by the previous process
         _PRICES[lp] = (mono - (wall - e["ts"]), {"usd": e["usd"], "adapter": e["adapter"], "supply": e["supply"]})
 

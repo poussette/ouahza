@@ -1,1 +1,3 @@
-v0.1.30: correction activation pour une gateway privé / token
+v0.1.31: Moins d'appels à api.multiversx.com pendant la valorisation des LP, pour limiter les erreurs 429 :
+- Le code des contrats de pool et les rôles des tokens LP sont conservés 1 h (et le code survit à un arrêt-relance).
+- Les réserves, soldes et supply restent relus à chaque actualisation : les vérifications de cohérence sont inchangées.

@@ -291,5 +291,69 @@ class PersistedPriceTests(unittest.TestCase):
         self.assertEqual(lp.get_cache().prices, {})
 
 
+class SlowFactsTests(unittest.TestCase):
+    """Code hashes and role holders are not asked again for an hour; supply/balances still are."""
+
+    def setUp(self):
+        import tempfile
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "lp_cache.json")
+        pricing.clear_cache()
+        lp.set_cache_path(None)
+
+    def tearDown(self):
+        lp.set_cache_path(None)
+
+    def chain(self):
+        return Chain({WEGLD: 12 * E18, OTHER: 50 * E18}, pair_views())
+
+    def accounts(self, c):
+        return [x for x in c.calls if "/accounts/" in x[1]]
+
+    def fresh_prices(self):
+        lp._PRICES.clear()
+        if lp.get_cache().prices:
+            lp.get_cache().prices.clear()
+
+    def test_code_hash_not_asked_again_within_an_hour(self):
+        lp.set_cache_path(self.path)
+        c1 = self.chain()
+        price(c1)
+        self.assertEqual(len(self.accounts(c1)), 1)
+        self.fresh_prices()                      # price expired, contract facts did not
+        c2 = self.chain()
+        out = price(c2)
+        self.assertIn(LPID, out)
+        self.assertEqual(len(self.accounts(c2)), 0)
+        self.assertTrue(any("/esdt/" in x[1] for x in c2.calls))      # balances still cross-checked
+        self.assertTrue(vm_calls(c2))                                  # reserves still read live
+
+    def test_code_hash_survives_a_quick_relaunch_but_not_an_hour(self):
+        lp.set_cache_path(self.path)
+        price(self.chain())
+        lp.set_cache_path(None)
+        lp.set_cache_path(self.path)
+        self.fresh_prices()
+        c = self.chain()
+        price(c)
+        self.assertEqual(len(self.accounts(c)), 0)
+        real = lp.time.time
+        lp.set_cache_path(None)
+        with mock.patch.object(lp.time, "time", lambda: real() + lp.SLOW_TTL + 5):
+            lp.set_cache_path(self.path)
+        self.fresh_prices()
+        lp._CODE_HASHES.clear()
+        c2 = self.chain()
+        price(c2)
+        self.assertEqual(len(self.accounts(c2)), 1)
+
+    def test_garbage_hashes_ignored(self):
+        import json
+        with open(self.path, "w") as f:
+            json.dump({"v": 1, "codehashes": {POOL: {"ts": "x", "h": 3}, "nope": {"ts": 1, "h": "a"}}}, f)
+        lp.set_cache_path(self.path)
+        self.assertEqual(lp.get_cache().hashes, {})
+
+
 if __name__ == "__main__":
     unittest.main()
