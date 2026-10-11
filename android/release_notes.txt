@@ -1,1 +1,1 @@
-v0.1.28: rafraichissement d'actualisation 30mn.
+v0.1.29: activation pour une gateway privé / token
