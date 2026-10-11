@@ -1,1 +1,1 @@
-v0.1.29: activation pour une gateway privé / token
+v0.1.30: correction activation pour une gateway privé / token

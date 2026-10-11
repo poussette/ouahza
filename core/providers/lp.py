@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.29"
+__version__ = "0.1.30"
 
 
 
@@ -83,6 +83,16 @@ _LP_WORDS = ("lp", "liquidity", "pool")
 
 #: filled by price_lp_tokens: how far the last run got (shown to the user).
 LAST_STATS: dict = {"candidates": 0, "examined": 0, "valued": 0, "stopped": False}
+
+
+def gateway_headers() -> dict | None:
+    """`X-Api-Key` for a private gateway (env MULTIVERSX_GATEWAY_KEY). Never sent to the public default."""
+    key = (os.environ.get("MULTIVERSX_GATEWAY_KEY") or "").strip()
+    if not key or gateway_url() == DEFAULT_GATEWAY:
+        return None
+    if not all(33 <= ord(c) < 127 for c in key):
+        return None
+    return {"X-Api-Key": key}
 
 
 def gateway_url() -> str:
@@ -220,7 +230,7 @@ def vm_query(sc: str, func: str, args: list[str] | None = None, budget: Budget |
         doc = request_json(
             "POST", f"{gateway_url()}/vm-values/query",
             json_body={"scAddress": sc, "funcName": func, "args": list(args or [])},
-            max_bytes=MAX_RESPONSE_BYTES, allow_loopback_http=True,
+            max_bytes=MAX_RESPONSE_BYTES, allow_loopback_http=True, headers=gateway_headers(),
         )
     except HttpError as exc:
         # some gateways answer "unknown function" with a 4xx/500: that only
@@ -483,7 +493,7 @@ def _balance(sc: str, token: str) -> int:
     try:
         d = request_json(
             "GET", f"{gateway_url()}/address/{quote(sc, safe='')}/esdt/{quote(token, safe='')}",
-            max_bytes=100_000, allow_loopback_http=True,
+            max_bytes=100_000, allow_loopback_http=True, headers=gateway_headers(),
         )
     except HttpError as exc:
         if re.match(r"HTTP 4\d\d ", str(exc)) and not str(exc).startswith("HTTP 429"):

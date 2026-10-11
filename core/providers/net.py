@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.29"
+__version__ = "0.1.30"
 
 
 
@@ -204,7 +204,7 @@ def _short_http_error(resp) -> str:
     return f"HTTP {resp.status_code} from {host}"
 
 
-def _send(method, url, params, json_body, timeout, allow_loopback_http):
+def _send(method, url, params, json_body, timeout, allow_loopback_http, headers=None):
     """One request, following redirects by hand: the scheme of every hop is
     checked *before* the next request is sent, so a hijacked endpoint
     answering `302 -> http://...` never receives the request (and its API key)
@@ -214,7 +214,7 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http):
         try:
             resp = requests.request(
                 method, url, params=params, json=json_body, timeout=timeout,
-                stream=True, allow_redirects=False,
+                stream=True, allow_redirects=False, headers=headers,
             )
         except requests.RequestException as exc:
             _count(urlsplit(url).hostname or "", "calls")
@@ -227,7 +227,10 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http):
         if not location:
             return resp
         resp.close()
+        previous_host = urlsplit(url).hostname
         url = urljoin(url, location)
+        if headers and urlsplit(url).hostname != previous_host:
+            headers = None   # a credential header never follows a redirect to another host
         if not _https_or_loopback(url, allow_loopback_http):
             raise HttpError("Refusing redirect to a non-HTTPS URL")
         if resp.status_code in (301, 302, 303):
@@ -245,6 +248,7 @@ def request_json(
     timeout=DEFAULT_TIMEOUT,
     max_bytes: int = DEFAULT_MAX_BYTES,
     allow_loopback_http: bool = False,
+    headers: dict | None = None,
 ):
     """Perform the request and return the decoded JSON document. Rate limits
     (429/502/503/504), timeouts and connection errors are retried with a
@@ -255,7 +259,7 @@ def request_json(
     while True:
         wait = None
         try:
-            resp = _send(method, url, params, json_body, timeout, allow_loopback_http)
+            resp = _send(method, url, params, json_body, timeout, allow_loopback_http, headers)
         except HttpError as exc:
             transient = "redirect" not in str(exc) and "non-HTTPS" not in str(exc)
             if not (transient and delays):

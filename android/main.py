@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.29"
+__version__ = "0.1.30"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
-APP_VERSION = "0.1.29"
+APP_VERSION = "0.1.30"
 
 
 def _version_problems() -> list[str]:
@@ -133,6 +133,7 @@ DEFAULT_SETTINGS = {
     "check_updates": True,
     "skip_version": "",
     "mvx_gateway": "",
+    "mvx_gateway_key": "",
 }
 
 #: limits on what a (possibly corrupted/tampered) settings file or a huge
@@ -162,6 +163,9 @@ def sanitize_settings(raw) -> dict:
     gw = raw.get("mvx_gateway")
     if isinstance(gw, str) and (not gw.strip() or validate_rpc_url(gw.strip())):
         out["mvx_gateway"] = gw.strip()[:MAX_KEY_CHARS]  # empty = public default
+    gk = raw.get("mvx_gateway_key")
+    if isinstance(gk, str):
+        out["mvx_gateway_key"] = "".join(ch for ch in gk.strip() if 33 <= ord(ch) < 127)[:MAX_KEY_CHARS]
     for k in ("secure_screen", "check_updates"):
         if isinstance(raw.get(k), bool):
             out[k] = raw[k]
@@ -847,7 +851,7 @@ class OuahzaApp(App):
     def _cfg_sig(self):
         """Empreinte de ce qui détermine le rapport (adresses, clés, passerelle) : jamais écrite en clair."""
         raw = "\n".join(str(self.settings.get(k, "") or "") for k in
-                        ("config_text", "etherscan_key", "beacon_key", "mvx_gateway"))
+                        ("config_text", "etherscan_key", "beacon_key", "mvx_gateway", "mvx_gateway_key"))
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
     def _meta_path(self):
@@ -1260,6 +1264,7 @@ class OuahzaApp(App):
                 "etherscan_key": self.settings.get("etherscan_key", ""),
                 "beacon_key": self.settings.get("beacon_key", ""),
                 "mvx_gateway": self.settings.get("mvx_gateway", ""),
+                "mvx_gateway_key": self.settings.get("mvx_gateway_key", ""),
                 "secure_screen": secure_checkbox.active,
                 "check_updates": upd_checkbox.active,
                 "skip_version": self.settings.get("skip_version", ""),
@@ -1296,6 +1301,10 @@ class OuahzaApp(App):
             "Gateway API MultiversX (vide = public)", self.settings.get("mvx_gateway", ""),
             hint="https://gateway.multiversx.com",
         )
+        gateway_key = row(
+            "Clé gateway (en-tête X-Api-Key)", self.settings.get("mvx_gateway_key", ""), password=True,
+            hint="vide = aucune",
+        )
         content.add_widget(Widget())
         buttons = BoxLayout(size_hint=(1, None), height=dp(52), spacing=dp(8))
         cancel = RoundedButton(text="Annuler", bg=SURFACE2, font_size=sp(15))
@@ -1303,7 +1312,7 @@ class OuahzaApp(App):
         buttons.add_widget(cancel)
         buttons.add_widget(save)
         content.add_widget(buttons)
-        popup = self._popup("Config API", content, size_hint=(0.95, None), height=dp(420))
+        popup = self._popup("Config API", content, size_hint=(0.95, None), height=dp(480))
 
         def do_save(_b):
             new = dict(self.settings)
@@ -1311,6 +1320,7 @@ class OuahzaApp(App):
                 "etherscan_key": etherscan.text.strip(),
                 "beacon_key": beacon.text.strip(),
                 "mvx_gateway": gateway.text.strip(),
+                "mvx_gateway_key": gateway_key.text.strip(),
             })
             self.save_settings(new)
             rejected = bool(gateway.text.strip()) and not self.settings.get("mvx_gateway")
@@ -1524,6 +1534,7 @@ class OuahzaApp(App):
             os.environ["ETHERSCAN_API_KEY"] = self.settings.get("etherscan_key", "") or ""
             os.environ["BEACONCHAIN_API_KEY"] = self.settings.get("beacon_key", "") or ""
             os.environ["MULTIVERSX_GATEWAY_URL"] = self.settings.get("mvx_gateway", "") or ""
+            os.environ["MULTIVERSX_GATEWAY_KEY"] = self.settings.get("mvx_gateway_key", "") or ""
             # Valorisation des LP toujours active ; un contrat inconnu n'est valorisé qu'après
             # approbation explicite (bannière « pools LP à approuver »), jamais en mode permissif.
             os.environ["WALLET_LP_PRICING"] = "1"
