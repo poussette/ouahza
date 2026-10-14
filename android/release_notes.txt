@@ -1,5 +1,3 @@
-v0.1.32: Source optionnelle « data-api Ecompass » pour MultiversX (token à renseigner dans Config API ; sans token, aucun appel à ce service) :
-- Un portefeuille est lu en un seul appel : tokens valorisés, LP, dépôts/emprunts Hatom, farms xExchange.
-- Repli sur l'API publique si le service est injoignable ; pour les tokens qu'il ne connaît pas, la liste publique n'est lue que s'il en manque.
-- Les emprunts (valeurs négatives) sont déduits du total et ne sont plus masqués comme poussière.
-- La ligne de statistiques indique « data-api-ecompass ».
+v0.1.33: Moins d'appels à l'API publique MultiversX et erreurs de passerelle visibles :
+- Avec la data-api, la liste des NFT/SFT n'est plus lue pour un portefeuille qui n'en détient aucun (la passerelle le dit déjà).
+- Si la passerelle MultiversX refuse la requête (HTTP 401, 403 ou 404 : clé ou URL erronée), un avertissement l'indique au lieu de lire l'API publique en silence.

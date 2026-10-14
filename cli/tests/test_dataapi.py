@@ -517,6 +517,62 @@ class Provider(unittest.TestCase):
         self.assertTrue(any(u.startswith("https://gw.example.org/address/") for u in self.calls))
         self.assertFalse(any(u.startswith("https://gateway.multiversx.com") for u in self.calls))
 
+    def nft_calls(self):
+        return [u for u in self.public_calls() if u.endswith("/nfts")]
+
+    def test_no_nft_on_the_gateway_means_no_public_nft_list(self):
+        w = self.balance(load("dataapi_wallet_defi.json"), tokens=self.PUBLIC_TOKENS[1:3])
+        self.assertIsNone(w.error)
+        self.assertEqual(self.nft_calls(), [])
+
+    def test_nft_or_meta_on_the_gateway_reads_the_public_nft_list(self):
+        gateway = self.gateway_doc(self.PUBLIC_TOKENS[1:3])
+        gateway["data"]["esdts"]["COLL-abcdef-01"] = {"tokenIdentifier": "COLL-abcdef-01", "balance": "1"}
+        self.balance(load("dataapi_wallet_defi.json"), gateway=gateway)
+        self.assertEqual(len(self.nft_calls()), 1)
+
+    def test_zero_balance_nft_does_not_trigger_the_nft_list(self):
+        gateway = self.gateway_doc(self.PUBLIC_TOKENS[1:3])
+        gateway["data"]["esdts"]["COLL-abcdef-01"] = {"tokenIdentifier": "COLL-abcdef-01", "balance": "0"}
+        self.balance(load("dataapi_wallet_defi.json"), gateway=gateway)
+        self.assertEqual(self.nft_calls(), [])
+
+    def test_unreadable_gateway_entry_reads_the_nft_list(self):
+        gateway = self.gateway_doc(self.PUBLIC_TOKENS[1:3])
+        gateway["data"]["esdts"]["JUNK"] = {"tokenIdentifier": 5, "balance": "x"}
+        self.balance(load("dataapi_wallet_defi.json"), gateway=gateway)
+        self.assertEqual(len(self.nft_calls()), 1)
+
+    def test_gateway_down_still_reads_the_nft_list(self):
+        self.balance(load("dataapi_wallet_defi.json"), gateway=HttpError("down"))
+        self.assertEqual(len(self.nft_calls()), 1)
+
+    def test_without_data_api_the_nft_list_is_always_read(self):
+        with mock.patch.dict(os.environ, {dataapi.ENV_TOKEN: ""}):
+            self.balance(load("dataapi_wallet_defi.json"), tokens=self.PUBLIC_TOKENS[1:3])
+        self.assertEqual(len(self.nft_calls()), 1)
+        self.assertFalse([u for u in self.calls if "/address/" in u])
+
+    def test_gateway_refusal_is_reported_not_silent(self):
+        for code in (401, 403, 404):
+            self.calls.clear()
+            w = self.balance(load("dataapi_wallet_defi.json"),
+                             gateway=HttpError(f"HTTP {code} from gw.example.org"))
+            self.assertIn(f"HTTP {code}", w.warning or "", code)
+            self.assertIn("MULTIVERSX_GATEWAY", w.warning)
+            self.assertTrue(any(u.endswith("/tokens") for u in self.public_calls()))
+
+    def test_gateway_timeout_gives_no_refusal_warning(self):
+        w = self.balance(load("dataapi_wallet_defi.json"), gateway=HttpError("timeout"))
+        self.assertNotIn("MULTIVERSX_GATEWAY", w.warning or "")
+
+    def test_gateway_key_never_in_the_refusal_warning(self):
+        key = "cac8ae0d-2250-4c21-afbb-e297c73b503e"
+        with mock.patch.dict(os.environ, {"MULTIVERSX_GATEWAY_URL": "https://gw.example.org",
+                                          "MULTIVERSX_GATEWAY_KEY": key}):
+            w = self.balance(load("dataapi_wallet_defi.json"), gateway=HttpError("HTTP 403 from gw.example.org"))
+        self.assertNotIn(key, w.warning or "")
+
     def test_public_list_failure_keeps_data_api_lines_and_warns(self):
         w = self.balance(load("dataapi_wallet_defi.json"), tokens_error=True)
         self.assertIsNone(w.error)

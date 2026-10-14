@@ -38,7 +38,7 @@ delegation contract, not the wallet, so it's covered too:
 
 from __future__ import annotations
 
-__version__ = "0.1.32"
+__version__ = "0.1.33"
 
 
 
@@ -50,6 +50,7 @@ import os
 import re
 import threading
 import time
+from typing import NamedTuple
 from urllib.parse import quote
 
 import requests
@@ -187,36 +188,65 @@ class _Skip(Exception):
 _FUNGIBLE_ID_RE = re.compile(r"[A-Z0-9]{3,10}-[0-9a-f]{6}")
 
 
-def has_tokens_unknown_to_dataapi(address: str, known_ids: set[str]) -> bool:
-    """Does the wallet hold fungible ESDT tokens the data-api left out?
+class GatewayScan(NamedTuple):
+    """What the wallet's own token list (read from the gateway) tells us."""
+    unknown: bool            # a fungible token the data-api left out (True too when we cannot tell)
+    has_nft: bool            # an NFT / SFT / meta-ESDT entry (True too when we cannot tell)
+    problem: str | None = None   # shown to the user when the gateway refused the request
 
-    The data-api silently drops the tokens it does not index and says nothing
-    about it, so the wallet's own token list is compared with what it
-    returned. That list comes from the gateway (the configured one, else the
-    public gateway: ONE call, not api.multiversx.com), the very source the
-    data-api reads. Only plain fungible entries are compared (an NFT/SFT/
-    meta-ESDT key carries a nonce). If the gateway cannot answer, the answer
-    is "yes": showing a token is better than silently missing it."""
+
+def scan_gateway(address: str, known_ids: set[str]) -> GatewayScan:
+    """Read the wallet's token list from the gateway (ONE call, not
+    api.multiversx.com) and answer two questions at once:
+
+    - does the wallet hold fungible ESDT tokens the data-api left out? The
+      data-api silently drops the tokens it does not index, so its list is
+      compared with the wallet's own (the very source it reads);
+    - does the wallet hold anything that is not a plain fungible token (NFT,
+      SFT, meta-ESDT: their key carries a nonce)? If not, the public NFT list
+      is not read at all.
+
+    The gateway is the configured one, else the public gateway. If it cannot
+    answer, both answers are "yes": showing an asset is better than silently
+    missing it. A refusal (401/403/404, typically a wrong key or a route the
+    gateway does not expose) is also reported, so it is not silent."""
     try:
         doc = request_json(
             "GET", f"{lp.gateway_url()}/address/{quote(address, safe='')}/esdt",
             max_bytes=20_000_000, allow_loopback_http=True, headers=lp.gateway_headers(),
         )
-        entries = doc["data"]["esdts"].values()
-        for entry in entries:
+        entries = doc["data"]["esdts"]
+        unknown = has_nft = False
+        for key, entry in entries.items():
             ident = entry.get("tokenIdentifier")
-            if not isinstance(ident, str) or not _FUNGIBLE_ID_RE.fullmatch(ident):
-                continue
+            if not isinstance(ident, str):
+                ident = key if isinstance(key, str) else ""
             try:
                 if int(entry.get("balance", 0)) <= 0:
                     continue
             except (TypeError, ValueError):
+                has_nft = True       # unreadable entry: do not guess
                 continue
-            if ident not in known_ids:
-                return True
-        return False
-    except (requests.RequestException, KeyError, TypeError, AttributeError):
-        return True
+            if not _FUNGIBLE_ID_RE.fullmatch(ident):
+                has_nft = True
+            elif ident not in known_ids:
+                unknown = True
+        return GatewayScan(unknown, has_nft)
+    except (requests.RequestException, KeyError, TypeError, AttributeError) as exc:
+        problem = None
+        code = re.match(r"HTTP (401|403|404)\b", str(exc))
+        if code:
+            problem = (
+                f"gateway answered HTTP {code.group(1)} for the token list: check "
+                "MULTIVERSX_GATEWAY_URL / MULTIVERSX_GATEWAY_KEY (and that the gateway "
+                "exposes /address/<addr>/esdt); the public API is used instead"
+            )
+        return GatewayScan(True, True, problem)
+
+
+def has_tokens_unknown_to_dataapi(address: str, known_ids: set[str]) -> bool:
+    """Kept for callers/tests: only the "unknown token" half of scan_gateway."""
+    return scan_gateway(address, known_ids).unknown
 
 
 class MultiversXProvider(BaseProvider):
@@ -308,9 +338,13 @@ class MultiversXProvider(BaseProvider):
         # read ONLY when the wallet holds a token the data-api does not know,
         # and then only those tokens are taken from it (the ones the data-api
         # knows, even left unpriced on purpose, are never added twice).
+        scan = None
         if fetched is not None:
             wallet.tokens.extend(fetched.tokens)
-        if fetched is None or has_tokens_unknown_to_dataapi(address, fetched.known_ids):
+            scan = scan_gateway(address, fetched.known_ids)
+            if scan.problem:
+                warnings.append(scan.problem)
+        if scan is None or scan.unknown:
             try:
                 fungible = self._paginate(f"/accounts/{qaddr}/tokens")
                 for tok in fungible:
@@ -328,15 +362,18 @@ class MultiversXProvider(BaseProvider):
                 else:
                     warnings.append(f"could not fetch ESDT/MetaESDT tokens: {safe_error(exc)}")
 
-        # NFTs and SFTs live on a separate endpoint.
-        try:
-            nfts_sfts = self._paginate(f"/accounts/{qaddr}/nfts")
-            for tok in nfts_sfts:
-                tb = self._to_token_balance(tok)
-                if tb:
-                    wallet.tokens.append(tb)
-        except requests.RequestException as exc:
-            warnings.append(f"could not fetch NFTs/SFTs: {safe_error(exc)}")
+        # NFTs and SFTs live on a separate endpoint. With the data-api the
+        # gateway list read above says whether the wallet holds any: if not,
+        # the (paginated) public call is skipped.
+        if scan is None or scan.has_nft:
+            try:
+                nfts_sfts = self._paginate(f"/accounts/{qaddr}/nfts")
+                for tok in nfts_sfts:
+                    tb = self._to_token_balance(tok)
+                    if tb:
+                        wallet.tokens.append(tb)
+            except requests.RequestException as exc:
+                warnings.append(f"could not fetch NFTs/SFTs: {safe_error(exc)}")
 
         # --- Staked EGLD held by staking smart contracts, not the wallet ---
 
