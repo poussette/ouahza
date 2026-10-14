@@ -114,6 +114,22 @@ export BEACONCHAIN_API_KEY="votre_clé"
 
 Bitcoin, Solana et MultiversX n'ont besoin d'aucune clé.
 
+## Data-api Ecompass (MultiversX, optionnelle)
+
+Avec un **token data-api Ecompass**, un portefeuille MultiversX se lit en **un seul appel** (`/portfolios/{adresse}` sur `data-api.mvx.fr`) au lieu de plusieurs dizaines vers `api.multiversx.com` : solde EGLD, tokens ESDT avec prix, LP, dépôts/emprunts Hatom et farms xExchange (avec récompenses en attente). Sans token, rien ne change et ce service n'est **jamais contacté**.
+
+- **Activer** : app → Config API → « Token data-api Ecompass » ; CLI → variable `WALLET_DATA_API_TOKEN` (envoyé en en-tête `X-Api-Key`, jamais suivi vers un autre hôte ni affiché). L'adresse du service est fixe dans le code : ce n'est pas un réglage.
+- **Repli** : data-api injoignable, token refusé ou réponse incohérente → l'API publique est utilisée comme avant, avec un avertissement.
+- **Tokens inconnus de la data-api** : elle écarte sans le dire les tokens qu'elle n'indexe pas. Pour le savoir, la liste des tokens du wallet est lue sur le gateway (celui configuré, sinon le gateway public : un seul appel, jamais `api.multiversx.com`) et comparée à la réponse. **Seulement s'il manque au moins un token fongible**, la liste est lue sur l'API publique et ces tokens-là (eux seuls) sont ajoutés, puis valorisés comme avant (xExchange public, lecteur de pools local pour les LP). Un token connu de la data-api mais volontairement non valorisé (illiquide, sans source de prix) reste non valorisé et n'est pas redemandé. Si le gateway ne répond pas, la liste publique est lue par prudence. Limite : un meta-ESDT ou un NFT inconnu de la data-api ne déclenche pas cette lecture (les NFT/SFT passent par `/nfts` comme avant).
+- **Ce qui reste sur l'API publique** : NFT/SFT, staking (délégation, récompenses, unbonding, legacy, validateur), prix de l'EGLD natif (CoinGecko) et conversion EUR.
+- **Règles de valorisation** (les données de la data-api sont traitées comme non fiables) :
+  - token simple : source de prix présente, liquidité ≥ `WALLET_DATA_API_MIN_LIQUIDITY` (défaut 1000 $), prix rafraîchi il y a moins de `WALLET_DATA_API_MAX_AGE` secondes (défaut 600 ; l'USDC, monnaie de cotation, est exempté) ;
+  - LP : adossé à une pool connue de la data-api, prix frais, position ≤ quantité totale, et valeur concordant (±5 %) avec celle des actifs sous-jacents. Sinon la ligne est laissée au lecteur de pools local (`lp.py`) ;
+  - Hatom : valorisé via l'actif sous-jacent, un emprunt est une ligne **négative** (déduite du total) ;
+  - farms : parts × prix du LP ; récompenses valorisées à part ;
+  - tout le reste : affiché sans valeur, et **pas** repricé ailleurs.
+- **Limites** : les emprunts Hatom ne sont testés que sur des données synthétiques ; dans la ligne de statistiques d'appels le service apparaît sous le nom « data-api-ecompass ».
+
 ## Sources de données
 
 | Chaîne      | API                                  | Clé requise |
@@ -121,7 +137,7 @@ Bitcoin, Solana et MultiversX n'ont besoin d'aucune clé.
 | Bitcoin     | blockstream.info (Esplora)            | non |
 | Ethereum    | RPC public (solde) + Etherscan (tokens) | non / oui pour les tokens |
 | Solana      | RPC public mainnet-beta               | non |
-| MultiversX  | api.multiversx.com                    | non |
+| MultiversX  | api.multiversx.com (ou data-api Ecompass avec token, voir ci-dessus) | non |
 | Prix natifs (BTC/ETH/SOL/EGLD) | CoinGecko (`/simple/price`) | non |
 | Prix tokens ERC-20 / SPL | CoinGecko (`/simple/token_price/{platform}`) | non |
 | Prix tokens ESDT MultiversX | xExchange, via `api.multiversx.com/mex-tokens` (large) + `/tokens?identifiers=` (ciblé, tout token avec liquidité DEX) | non |

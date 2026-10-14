@@ -25,7 +25,7 @@ address, its platform id to TOKEN_PLATFORM_IDS.
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -380,6 +380,20 @@ def _price_token(
             tok.eur_value = tok.amount * eur
 
 
+def _finish_locked(tok: TokenBalance, usd_eur_rate: float | None) -> None:
+    """A provider already decided this line's USD value (or left it unpriced
+    on purpose): keep the same sanity ceiling as everywhere else, add the EUR
+    value, and ask no price source. A borrow is a negative value."""
+    if tok.usd_value is None:
+        return
+    if abs(tok.usd_value) > MAX_POSITION_USD:
+        tok.usd_value = None
+        tok.eur_value = None
+        return
+    if tok.eur_value is None and usd_eur_rate is not None:
+        tok.eur_value = tok.usd_value * usd_eur_rate
+
+
 #: human-readable notes about the last apply_pricing run (shown by CLI / app).
 LAST_NOTES: list[str] = []
 
@@ -449,6 +463,8 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
     multiversx_identifiers: set[str] = set()
     for w in results:
         for tok in w.tokens:
+            if tok.price_locked:
+                continue
             if tok.asset_type in CONTRACT_PRICED_TYPES and tok.contract:
                 if w.chain == "multiversx":
                     multiversx_identifiers.add(tok.contract)
@@ -479,16 +495,24 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
             prices.update(_fetch_token_prices_by_identifier(still_unpriced))
         return prices
 
+    # Lines a provider valued itself (providers/dataapi.py) only need the
+    # USD -> EUR conversion, not a price source.
+    needs_fx = bool(multiversx_identifiers) or any(
+        tok.price_locked and tok.usd_value is not None
+        for w in results if not w.error
+        for tok in w.tokens
+    )
     xexchange_prices: dict[str, float] = {}
     usd_eur_rate: float | None = None
     lp_prices: dict[str, dict] = {}
     with ThreadPoolExecutor(max_workers=3) as pool:
         f_cg = pool.submit(_coingecko)
         f_mvx = pool.submit(_xexchange) if multiversx_identifiers else None
-        f_fx = pool.submit(_fetch_usd_eur_rate) if multiversx_identifiers else None
+        f_fx = pool.submit(_fetch_usd_eur_rate) if needs_fx else None
         native_prices, token_prices_by_chain = f_cg.result()
         if f_mvx is not None:
             xexchange_prices = f_mvx.result()
+        if f_fx is not None:
             usd_eur_rate = f_fx.result()
     LAST_TIMINGS["prix"] = time.monotonic() - t_start
     t_lp = time.monotonic()
@@ -502,6 +526,7 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
             for tok in w.tokens:
                 if (
                     w.chain == "multiversx"
+                    and not tok.price_locked
                     and tok.asset_type in CONTRACT_PRICED_TYPES
                     and tok.contract
                     and tok.contract not in xexchange_prices
@@ -545,11 +570,14 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
 
         token_prices = token_prices_by_chain.get(w.chain, {})
         for tok in w.tokens:
-            _price_token(
-                tok, w.chain, native_price, token_prices, xexchange_prices, usd_eur_rate
-            )
-            if tok.usd_value is None and w.chain == "multiversx" and tok.contract in lp_prices:
-                _price_lp(tok, lp_prices[tok.contract], usd_eur_rate)
+            if tok.price_locked:
+                _finish_locked(tok, usd_eur_rate)
+            else:
+                _price_token(
+                    tok, w.chain, native_price, token_prices, xexchange_prices, usd_eur_rate
+                )
+                if tok.usd_value is None and w.chain == "multiversx" and tok.contract in lp_prices:
+                    _price_lp(tok, lp_prices[tok.contract], usd_eur_rate)
             if tok.usd_value is not None:
                 total_usd += tok.usd_value
                 has_any_price = True

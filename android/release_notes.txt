@@ -1,3 +1,5 @@
-v0.1.31: Moins d'appels à api.multiversx.com pendant la valorisation des LP, pour limiter les erreurs 429 :
-- Le code des contrats de pool et les rôles des tokens LP sont conservés 1 h (et le code survit à un arrêt-relance).
-- Les réserves, soldes et supply restent relus à chaque actualisation : les vérifications de cohérence sont inchangées.
+v0.1.32: Source optionnelle « data-api Ecompass » pour MultiversX (token à renseigner dans Config API ; sans token, aucun appel à ce service) :
+- Un portefeuille est lu en un seul appel : tokens valorisés, LP, dépôts/emprunts Hatom, farms xExchange.
+- Repli sur l'API publique si le service est injoignable ; pour les tokens qu'il ne connaît pas, la liste publique n'est lue que s'il en manque.
+- Les emprunts (valeurs négatives) sont déduits du total et ne sont plus masqués comme poussière.
+- La ligne de statistiques indique « data-api-ecompass ».

@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -163,6 +163,10 @@ def _count(host: str, field: str, amount: float = 1) -> None:
         row[field] = row.get(field, 0) + amount
 
 
+#: host names shown differently in the statistics line.
+HOST_LABELS = {"data-api.mvx.fr": "data-api-ecompass"}
+
+
 def stats_summary(max_hosts: int = 4) -> str:
     """"api.multiversx.com 120 appels (attente 48 s, 3×429) · ..." (most used first)."""
     with _stats_lock:
@@ -174,7 +178,7 @@ def stats_summary(max_hosts: int = 4) -> str:
                 extra.append(f"attente {row['wait']:.0f} s")
             if row["r429"]:
                 extra.append(f"{int(row['r429'])}×429")
-            parts.append(f"{host} {int(row['calls'])} appel(s)" + (f" ({', '.join(extra)})" if extra else ""))
+            parts.append(f"{HOST_LABELS.get(host, host)} {int(row['calls'])} appel(s)" + (f" ({', '.join(extra)})" if extra else ""))
     return " · ".join(parts)
 
 

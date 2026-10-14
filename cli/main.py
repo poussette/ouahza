@@ -57,13 +57,16 @@ Optional environment variables:
                         lookups (works without it too).
     MULTIVERSX_GATEWAY_URL  MultiversX node/gateway (https) used to read pool
                         contracts for LP-token valuation; default: the public one.
+    WALLET_DATA_API_TOKEN  Token of the Ecompass data-api: MultiversX wallets are
+                        then read from it in one call (public API as fallback).
+                        Without it that service is never contacted.
     ETH_RPC_URL         Override the default public Ethereum RPC endpoint.
     SOLANA_RPC_URL       Override the default public Solana RPC endpoint.
 """
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -245,7 +248,7 @@ def filter_dust(results: list[WalletBalance], threshold_usd: float = DUST_THRESH
     for w in results:
         kept = [
             t for t in w.tokens
-            if t.usd_value is None or t.usd_value >= threshold_usd
+            if t.usd_value is None or abs(t.usd_value) >= threshold_usd
         ]
         w.hidden_dust_count = len(w.tokens) - len(kept)
         w.tokens = kept

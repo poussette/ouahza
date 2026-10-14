@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import importlib
 
-VERSION = "0.1.31"
+VERSION = "0.1.32"
 __version__ = VERSION
 
 #: importable components (the entry script is checked by its caller)
 COMPONENTS = [
     "providers", "providers.base", "providers.bitcoin", "providers.ethereum",
     "providers.solana", "providers.multiversx", "providers.net", "providers.safe",
-    "providers.lp", "providers.updater", "pricing", "report",
+    "providers.lp", "providers.dataapi", "providers.updater", "pricing", "report",
 ]
 
 

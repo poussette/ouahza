@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -11,6 +11,7 @@ __version__ = "0.1.31"
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import ClassVar
 
 
 @dataclass
@@ -25,6 +26,11 @@ class TokenBalance:
     #: kind of asset, e.g. "token" (fungible, default), "nft", "sft",
     #: "meta-esdt". Chains without that distinction just leave it as "token".
     asset_type: str = "token"
+    #: a provider that already valued this line (or deliberately left it
+    #: unpriced, see providers/dataapi.py) sets this instance attribute to True:
+    #: apply_pricing then asks no price source for it. Not a dataclass field,
+    #: so it is never exported or saved.
+    price_locked: ClassVar[bool] = False
 
 
 @dataclass

@@ -2,6 +2,9 @@
 
 Backed by the free public MultiversX REST API (no key required).
 Docs: https://api.multiversx.com/#/
+Optionally, with a data-api token (WALLET_DATA_API_TOKEN) the wallet and token
+part come from one call to the Ecompass data-api (providers/dataapi.py); this
+public API remains the fallback, and covers the tokens the data-api lacks.
 
 MultiversX has several distinct asset kinds on top of the native EGLD coin:
   - FungibleESDT : a regular fungible token (e.g. USDC, WTAO, MEX, ...)
@@ -35,7 +38,7 @@ delegation contract, not the wallet, so it's covered too:
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -51,6 +54,7 @@ from urllib.parse import quote
 
 import requests
 
+from . import dataapi, lp
 from .base import BaseProvider, TokenBalance, WalletBalance
 from .net import request_json
 from .safe import clean_text, safe_decimals, safe_error
@@ -180,6 +184,41 @@ class _Skip(Exception):
     """Internal: this lookup is skipped (answered "nothing" recently)."""
 
 
+_FUNGIBLE_ID_RE = re.compile(r"[A-Z0-9]{3,10}-[0-9a-f]{6}")
+
+
+def has_tokens_unknown_to_dataapi(address: str, known_ids: set[str]) -> bool:
+    """Does the wallet hold fungible ESDT tokens the data-api left out?
+
+    The data-api silently drops the tokens it does not index and says nothing
+    about it, so the wallet's own token list is compared with what it
+    returned. That list comes from the gateway (the configured one, else the
+    public gateway: ONE call, not api.multiversx.com), the very source the
+    data-api reads. Only plain fungible entries are compared (an NFT/SFT/
+    meta-ESDT key carries a nonce). If the gateway cannot answer, the answer
+    is "yes": showing a token is better than silently missing it."""
+    try:
+        doc = request_json(
+            "GET", f"{lp.gateway_url()}/address/{quote(address, safe='')}/esdt",
+            max_bytes=20_000_000, allow_loopback_http=True, headers=lp.gateway_headers(),
+        )
+        entries = doc["data"]["esdts"].values()
+        for entry in entries:
+            ident = entry.get("tokenIdentifier")
+            if not isinstance(ident, str) or not _FUNGIBLE_ID_RE.fullmatch(ident):
+                continue
+            try:
+                if int(entry.get("balance", 0)) <= 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            if ident not in known_ids:
+                return True
+        return False
+    except (requests.RequestException, KeyError, TypeError, AttributeError):
+        return True
+
+
 class MultiversXProvider(BaseProvider):
     chain_id = "multiversx"
     display_name = "MultiversX"
@@ -235,28 +274,59 @@ class MultiversXProvider(BaseProvider):
             chain=self.chain_id, address=address, native_symbol=self.native_symbol
         )
 
-        try:
-            data = _get(f"/accounts/{quote(address, safe='')}")
-            wallet.native_amount = int(data.get("balance", 0)) / 1e18
-        except requests.RequestException as exc:
-            wallet.error = f"API error: {safe_error(exc)}"
-            return wallet
-        except (*_NUM_ERR, AttributeError) as exc:
-            wallet.error = f"Unexpected response: {safe_error(exc)}"
-            return wallet
-
         warnings: list[str] = []
+
+        # Optional (only with a data-api token): ONE call to the Ecompass
+        # data-api (providers/dataapi.py) gives the native balance, the ESDT
+        # tokens, the LP tokens, Hatom and farm positions, already valued.
+        # If it is down the public API is used for everything.
+        fetched = None
+        if dataapi.enabled():
+            try:
+                fetched = dataapi.fetch(address)
+            except requests.RequestException as exc:
+                warnings.append(f"data-api unavailable, public API used instead: {safe_error(exc)}")
+        elif dataapi.config_error():
+            warnings.append(dataapi.config_error())
+
+        if fetched is not None:
+            wallet.native_amount = fetched.native_amount
+        else:
+            try:
+                data = _get(f"/accounts/{quote(address, safe='')}")
+                wallet.native_amount = int(data.get("balance", 0)) / 1e18
+            except requests.RequestException as exc:
+                wallet.error = f"API error: {safe_error(exc)}"
+                return wallet
+            except (*_NUM_ERR, AttributeError) as exc:
+                wallet.error = f"Unexpected response: {safe_error(exc)}"
+                return wallet
 
         # Fungible + MetaESDT tokens (paginated: an account can hold more
         # than the API's default page size, which is how tokens go missing).
-        try:
-            fungible = self._paginate(f"/accounts/{qaddr}/tokens")
-            for tok in fungible:
-                tb = self._to_token_balance(tok)
-                if tb:
+        # With the data-api its lines are used as they are; the public list is
+        # read ONLY when the wallet holds a token the data-api does not know,
+        # and then only those tokens are taken from it (the ones the data-api
+        # knows, even left unpriced on purpose, are never added twice).
+        if fetched is not None:
+            wallet.tokens.extend(fetched.tokens)
+        if fetched is None or has_tokens_unknown_to_dataapi(address, fetched.known_ids):
+            try:
+                fungible = self._paginate(f"/accounts/{qaddr}/tokens")
+                for tok in fungible:
+                    tb = self._to_token_balance(tok)
+                    if tb is None:
+                        continue
+                    if fetched is not None and dataapi.base_id(tb.contract or "") in fetched.known_ids:
+                        continue
                     wallet.tokens.append(tb)
-        except requests.RequestException as exc:
-            warnings.append(f"could not fetch ESDT/MetaESDT tokens: {safe_error(exc)}")
+            except requests.RequestException as exc:
+                if fetched is not None:
+                    warnings.append(
+                        f"tokens unknown to the data-api could not be read: {safe_error(exc)}"
+                    )
+                else:
+                    warnings.append(f"could not fetch ESDT/MetaESDT tokens: {safe_error(exc)}")
 
         # NFTs and SFTs live on a separate endpoint.
         try:

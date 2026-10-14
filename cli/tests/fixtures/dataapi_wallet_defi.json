@@ -1,0 +1,1970 @@
+{
+ "address": "erd1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "all_assets": [],
+ "staking_delegations": [
+  {
+   "active_stake": "0",
+   "address": "erd1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy8lllls62y8s5",
+   "staking_provider": {
+    "apr": 8.450309852667118,
+    "avatar": "https://raw.githubusercontent.com/multiversx/mx-assets/master/identities/thepalmtreenw/logo.png",
+    "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqqy8lllls62y8s5",
+    "name": "The Palm Tree Network",
+    "service_fee": 1200.0
+   },
+   "usd_value": 0.0
+  },
+  {
+   "active_stake": "0",
+   "address": "erd1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9hllllsz2je7q",
+   "staking_provider": {
+    "apr": 7.882890608208229,
+    "avatar": "https://raw.githubusercontent.com/multiversx/mx-assets/master/identities/partnerstaking/logo.png",
+    "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9hllllsz2je7q",
+    "name": "PartnerStaking",
+    "service_fee": 1200.0
+   },
+   "usd_value": 0.0
+  },
+  {
+   "active_stake": "1103758282324210301",
+   "address": "erd1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd8llllslmf3hu",
+   "staking_provider": {
+    "apr": 8.723150258892188,
+    "avatar": "https://raw.githubusercontent.com/multiversx/mx-assets/master/identities/incalng/logo.png",
+    "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqqd8llllslmf3hu",
+    "name": "Incal 2026=(🕊+♥️+⏳).🌍",
+    "service_fee": 100.0
+   },
+   "usd_value": 4.0
+  }
+ ],
+ "tokens": [
+  {
+   "balance": "2140685999399202000",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "ALP-2975f6",
+     "decimals": 18
+    },
+    "timestamp": 1791977075,
+    "usd_price": 1.0049855875111997,
+    "usdc_rate_now": 1.0050543932854004,
+    "usdc_rate_5m": 1.0050543932854004,
+    "usdc_rate_1h": 1.0050543932854004,
+    "usdc_rate_24h": 1.0050543932854004,
+    "usdc_rate_7d": 1.0050543932854004,
+    "usdc_rate_30d": 1.0050543932854004,
+    "usdc_tv_symbol": "ASHSWAP:ALP/USDC",
+    "supply": "331238195739587502162266",
+    "circulating_supply": "331238195739587502162266",
+    "market_cap": 332935.1965128844,
+    "custom_name": "USDC-USH (AshSwap LP)",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": true,
+    "rank_per_tvl": 1556
+   },
+   "usd_value": 2.1513585767832066
+  },
+  {
+   "balance": "4152000",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "EGLDUSDC-594e5e",
+     "decimals": 18
+    },
+    "timestamp": 1791977075,
+    "usd_price": 326119390795.7527,
+    "usdc_rate_now": 326141718376.80896,
+    "usdc_rate_5m": 326141718376.80896,
+    "usdc_rate_1h": 326141718376.80896,
+    "usdc_rate_24h": 326141718376.80896,
+    "usdc_rate_7d": 326141718376.80896,
+    "usdc_rate_30d": 326141718376.80896,
+    "usdc_tv_symbol": "XEXCHANGE:EGLDUSDC/USDC",
+    "supply": "4643103601336",
+    "circulating_supply": "4643103601336",
+    "market_cap": 1514413.463510943,
+    "custom_name": "WEGLD-USDC (xExchange LP)",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": true,
+    "rank_per_tvl": 982
+   },
+   "usd_value": 1.3540477105839652
+  },
+  {
+   "balance": "30603258904754",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "JEXWEGLD-15791b",
+     "decimals": 18
+    },
+    "timestamp": 1791977075,
+    "usd_price": 10.346453620158506,
+    "usdc_rate_now": 10.347161984298662,
+    "usdc_rate_5m": 10.347161984298662,
+    "usdc_rate_1h": 10.347161984298662,
+    "usdc_rate_24h": 10.347161984298662,
+    "usdc_rate_7d": 10.347161984298662,
+    "usdc_rate_30d": 10.347161984298662,
+    "usdc_tv_symbol": "ONEDEX:JEXWEGLD/USDC",
+    "supply": "2174812977000428205",
+    "circulating_supply": "2174812977000428205",
+    "market_cap": 22.50468282357623,
+    "custom_name": "JEX-WEGLD (OneDex LP)",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": true,
+    "rank_per_tvl": 1327
+   },
+   "usd_value": 0.00031663519888374005
+  },
+  {
+   "balance": "16318024739731619288",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "LPETHBTC-071be8",
+     "decimals": 18
+    },
+    "timestamp": 1791977075,
+    "usd_price": 131.06318212583088,
+    "usdc_rate_now": 131.0721552930359,
+    "usdc_rate_5m": 131.0721552930359,
+    "usdc_rate_1h": 131.0721552930359,
+    "usdc_rate_24h": 131.0721552930359,
+    "usdc_rate_7d": 131.0721552930359,
+    "usdc_rate_30d": 131.0721552930359,
+    "usdc_tv_symbol": "JEXCHANGELPS:LPETHBTC/USDC",
+    "supply": "153522309009144127547",
+    "circulating_supply": "153522309009144127547",
+    "market_cap": 20123.877603055756,
+    "custom_name": "WETH-WBTC (JEXchange LP)",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": true,
+    "rank_per_tvl": 1414
+   },
+   "usd_value": 2138.6922483972594
+  },
+  {
+   "balance": "523066380294911466118",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "LPJEX3USD-25e943",
+     "decimals": 18
+    },
+    "timestamp": 1791977075,
+    "usd_price": 1.0376070762574408,
+    "usdc_rate_now": 1.0376781154435597,
+    "usdc_rate_5m": 1.0376781154435597,
+    "usdc_rate_1h": 1.0376781154435597,
+    "usdc_rate_24h": 1.0376781154435597,
+    "usdc_rate_7d": 1.0376781154435597,
+    "usdc_rate_30d": 1.0376781154435597,
+    "usdc_tv_symbol": "JEXCHANGELPS:LPJEX3USD/USDC",
+    "supply": "533319812458454918660",
+    "circulating_supply": "533319812458454918660",
+    "market_cap": 553.4521871199055,
+    "custom_name": "WDAI-USDC-USDT (JEXchange LP)",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": true,
+    "rank_per_tvl": 1559
+   },
+   "usd_value": 542.7373775463658
+  },
+  {
+   "balance": "12100378699321",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "MXDOGWEGLD-75bcfe",
+     "decimals": 18
+    },
+    "timestamp": 1791977075,
+    "usd_price": 1885565.0469199582,
+    "usdc_rate_now": 1885694.141072622,
+    "usdc_rate_5m": 1885694.141072622,
+    "usdc_rate_1h": 1885694.141072622,
+    "usdc_rate_24h": 1885694.141072622,
+    "usdc_rate_7d": 1885694.141072622,
+    "usdc_rate_30d": 1885694.141072622,
+    "usdc_tv_symbol": "XEXCHANGE:MXDOGWEGLD/USDC",
+    "supply": "136531933695952",
+    "circulating_supply": "136531933695952",
+    "market_cap": 257.4750941207826,
+    "custom_name": "MXDOGE-WEGLD (xExchange LP)",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": true,
+    "rank_per_tvl": 1273
+   },
+   "usd_value": 22.81605112993446
+  },
+  {
+   "balance": "3473870927287092293506",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "SPORE-d48768",
+     "decimals": 18
+    },
+    "timestamp": 1791977072,
+    "usd_price": 0.0025498985047311294,
+    "usdc_rate_now": 0.002550073082101125,
+    "usdc_rate_5m": 0.002550073082101125,
+    "usdc_rate_1h": 0.00254730838566255,
+    "usdc_rate_24h": 0.0025711927300431,
+    "usdc_rate_7d": 0.0029897735981949,
+    "usdc_rate_30d": 0.003148686312744,
+    "usdc_tv_symbol": "COMPOSED:SPORE/USDC",
+    "supply": "10000000000000000000000000",
+    "circulating_supply": "103425956364154376708281",
+    "market_cap": 263.7618043824293,
+    "custom_name": "Spores",
+    "liquidity": "75306678831363992491845",
+    "usd_liquidity": 192.02438774836241,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 170
+   },
+   "usd_value": 8.858018283118298
+  },
+  {
+   "balance": "45828692",
+   "token": {
+    "can_add_special_roles": false,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "USDC-c76f1f",
+     "decimals": 6
+    },
+    "timestamp": 0,
+    "usd_price": 0.9999315402483085,
+    "usdc_rate_now": 1.0,
+    "usdc_rate_5m": 1.0,
+    "usdc_rate_1h": 1.0,
+    "usdc_rate_24h": 1.0,
+    "usdc_rate_7d": 1.0,
+    "usdc_rate_30d": 1.0,
+    "usdc_tv_symbol": ":USDC/USDC",
+    "supply": "7198088467132",
+    "circulating_supply": "7198088467132",
+    "market_cap": 7198581.280218975,
+    "custom_name": "WrappedUSDC",
+    "liquidity": "938557151762",
+    "usd_liquidity": 938492.8983724421,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 2
+   },
+   "usd_value": 45.82555457912534
+  },
+  {
+   "balance": "612462878546942775",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "WDAI-9eeb54",
+     "decimals": 18
+    },
+    "timestamp": 1791977074,
+    "usd_price": 0.9032278610114325,
+    "usdc_rate_now": 0.9032897,
+    "usdc_rate_5m": 0.9032897,
+    "usdc_rate_1h": 0.9032897,
+    "usdc_rate_24h": 0.90707195,
+    "usdc_rate_7d": 0.9407139,
+    "usdc_rate_30d": 0.9666913,
+    "usdc_tv_symbol": "JEXCHANGELPS:WDAI/USDC",
+    "supply": "-2703941439040434856343",
+    "circulating_supply": "-2703941439040434856343",
+    "market_cap": -2442.609671740009,
+    "custom_name": "WrappedDAI",
+    "liquidity": "7488886576224141799707",
+    "usd_liquidity": 6764.171003600161,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 35
+   },
+   "usd_value": 0.5531935357388599
+  },
+  {
+   "balance": "399541016955204493",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": false,
+    "description": null,
+    "token": {
+     "id": "WETH-b4ca29",
+     "decimals": 18
+    },
+    "timestamp": 1791977068,
+    "usd_price": 2483.6279707284853,
+    "usdc_rate_now": 2483.798010923565,
+    "usdc_rate_5m": 2483.798010923565,
+    "usdc_rate_1h": 2480.16276962864,
+    "usdc_rate_24h": 2490.1117956079797,
+    "usdc_rate_7d": 2635.8498613125003,
+    "usdc_rate_30d": 2489.8372897524,
+    "usdc_tv_symbol": "COMPOSED:WETH/USDC",
+    "supply": "224784253049761530157",
+    "circulating_supply": "224784253049761530157",
+    "market_cap": 558356.9055870486,
+    "custom_name": "WrappedETH",
+    "liquidity": "23204821939179736537",
+    "usd_liquidity": 57632.144823920804,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 10
+   },
+   "usd_value": 992.3112451632499
+  },
+  {
+   "balance": "14184112333533784394066616",
+   "token": {
+    "can_add_special_roles": false,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": false,
+    "description": null,
+    "token": {
+     "id": "XINU-6cc912",
+     "decimals": 18
+    },
+    "timestamp": 1791977074,
+    "usd_price": 2.0672452361718871e-07,
+    "usdc_rate_now": 2.06738676895674e-07,
+    "usdc_rate_5m": 2.06738676895674e-07,
+    "usdc_rate_1h": 2.065145383453944e-07,
+    "usdc_rate_24h": 2.084508819703728e-07,
+    "usdc_rate_7d": 2.4438002954660997e-07,
+    "usdc_rate_30d": 2.866187379846e-07,
+    "usdc_tv_symbol": "",
+    "supply": "987263636363636363635574205",
+    "circulating_supply": "987263636363636363635574205",
+    "market_cap": 0.0,
+    "custom_name": "Xinu",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 772
+   },
+   "usd_value": 2.932203865082463
+  },
+  {
+   "balance": "7810761692246062062",
+   "token": {
+    "can_add_special_roles": false,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": false,
+    "description": null,
+    "token": {
+     "id": "EGLD",
+     "decimals": 18
+    },
+    "timestamp": 1791977062,
+    "usd_price": 3.726765349102021,
+    "usdc_rate_now": 3.7270205,
+    "usdc_rate_5m": 3.7270205,
+    "usdc_rate_1h": 3.7229798,
+    "usdc_rate_24h": 3.7578876,
+    "usdc_rate_7d": 4.079079,
+    "usdc_rate_30d": 4.21554,
+    "usdc_tv_symbol": "XEXCHANGE:WEGLD/USDC",
+    "supply": "0",
+    "circulating_supply": null,
+    "market_cap": 0.0,
+    "custom_name": "EGLD",
+    "liquidity": null,
+    "usd_liquidity": null,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 1
+   },
+   "usd_value": 29.10887602475609
+  }
+ ],
+ "defi_positions": [
+  {
+   "lp_token": {
+    "balance": "2140685999399202000",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "ALP-2975f6",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 1.0049855875111997,
+     "usdc_rate_now": 1.0050543932854004,
+     "usdc_rate_5m": 1.0050543932854004,
+     "usdc_rate_1h": 1.0050543932854004,
+     "usdc_rate_24h": 1.0050543932854004,
+     "usdc_rate_7d": 1.0050543932854004,
+     "usdc_rate_30d": 1.0050543932854004,
+     "usdc_tv_symbol": "ASHSWAP:ALP/USDC",
+     "supply": "331238195739587502162266",
+     "circulating_supply": "331238195739587502162266",
+     "market_cap": 332935.1965128844,
+     "custom_name": "USDC-USH (AshSwap LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 1556
+    },
+    "usd_value": 2.1513585767832066
+   },
+   "underlying_assets": [
+    {
+     "balance": "507222",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "USDC-c76f1f",
+       "decimals": 6
+      },
+      "timestamp": 0,
+      "usd_price": 0.9999315402483085,
+      "usdc_rate_now": 1.0,
+      "usdc_rate_5m": 1.0,
+      "usdc_rate_1h": 1.0,
+      "usdc_rate_24h": 1.0,
+      "usdc_rate_7d": 1.0,
+      "usdc_rate_30d": 1.0,
+      "usdc_tv_symbol": ":USDC/USDC",
+      "supply": "7198088467132",
+      "circulating_supply": "7198088467132",
+      "market_cap": 7198581.280218975,
+      "custom_name": "WrappedUSDC",
+      "liquidity": "938557151762",
+      "usd_liquidity": 938492.8983724421,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 2
+     },
+     "usd_value": 0.5071881017201727
+    },
+    {
+     "balance": "1721617227314156938",
+     "token": {
+      "can_add_special_roles": true,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "USH-111e09",
+       "decimals": 18
+      },
+      "timestamp": 1791977073,
+      "usd_price": 0.9550151154261246,
+      "usdc_rate_now": 0.9550805,
+      "usdc_rate_5m": 0.9550805,
+      "usdc_rate_1h": 0.9550805,
+      "usdc_rate_24h": 0.95394605,
+      "usdc_rate_7d": 0.9653032,
+      "usdc_rate_30d": 0.99755496,
+      "usdc_tv_symbol": "JEXCHANGELPS:USH/USDC",
+      "supply": "648087440133958140600502",
+      "circulating_supply": "648087440133958140600502",
+      "market_cap": 619018.0541891431,
+      "custom_name": "HatomUSD",
+      "liquidity": "628763793622534082418294",
+      "usd_liquidity": 600478.9269421925,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 3
+     },
+     "usd_value": 1.6441704750630344
+    }
+   ],
+   "protocol": "ashswap",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "4152000",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "EGLDUSDC-594e5e",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 326119390795.7527,
+     "usdc_rate_now": 326141718376.80896,
+     "usdc_rate_5m": 326141718376.80896,
+     "usdc_rate_1h": 326141718376.80896,
+     "usdc_rate_24h": 326141718376.80896,
+     "usdc_rate_7d": 326141718376.80896,
+     "usdc_rate_30d": 326141718376.80896,
+     "usdc_tv_symbol": "XEXCHANGE:EGLDUSDC/USDC",
+     "supply": "4643103601336",
+     "circulating_supply": "4643103601336",
+     "market_cap": 1514413.463510943,
+     "custom_name": "WEGLD-USDC (xExchange LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 982
+    },
+    "usd_value": 1.3540477105839652
+   },
+   "underlying_assets": [
+    {
+     "balance": "181665273070365470",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "WEGLD-bd4d79",
+       "decimals": 18
+      },
+      "timestamp": 1791977062,
+      "usd_price": 3.726765349102021,
+      "usdc_rate_now": 3.7270205,
+      "usdc_rate_5m": 3.7270205,
+      "usdc_rate_1h": 3.7229798,
+      "usdc_rate_24h": 3.7578876,
+      "usdc_rate_7d": 4.079079,
+      "usdc_rate_30d": 4.21554,
+      "usdc_tv_symbol": "XEXCHANGE:WEGLD/USDC",
+      "supply": "573886861758184786866773",
+      "circulating_supply": "573886861758184786866773",
+      "market_cap": 2139034.53622663,
+      "custom_name": "WrappedEGLD",
+      "liquidity": "486025397532067951964306",
+      "usd_liquidity": 1811302.6103060457,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 1
+     },
+     "usd_value": 0.6770238448137945
+    },
+    {
+     "balance": "677070",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "USDC-c76f1f",
+       "decimals": 6
+      },
+      "timestamp": 0,
+      "usd_price": 0.9999315402483085,
+      "usdc_rate_now": 1.0,
+      "usdc_rate_5m": 1.0,
+      "usdc_rate_1h": 1.0,
+      "usdc_rate_24h": 1.0,
+      "usdc_rate_7d": 1.0,
+      "usdc_rate_30d": 1.0,
+      "usdc_tv_symbol": ":USDC/USDC",
+      "supply": "7198088467132",
+      "circulating_supply": "7198088467132",
+      "market_cap": 7198581.280218975,
+      "custom_name": "WrappedUSDC",
+      "liquidity": "938557151762",
+      "usd_liquidity": 938492.8983724421,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 2
+     },
+     "usd_value": 0.6770238657701708
+    }
+   ],
+   "protocol": "xexchange",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "30603258904754",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "JEXWEGLD-15791b",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 10.346453620158506,
+     "usdc_rate_now": 10.347161984298662,
+     "usdc_rate_5m": 10.347161984298662,
+     "usdc_rate_1h": 10.347161984298662,
+     "usdc_rate_24h": 10.347161984298662,
+     "usdc_rate_7d": 10.347161984298662,
+     "usdc_rate_30d": 10.347161984298662,
+     "usdc_tv_symbol": "ONEDEX:JEXWEGLD/USDC",
+     "supply": "2174812977000428205",
+     "circulating_supply": "2174812977000428205",
+     "market_cap": 22.50468282357623,
+     "custom_name": "JEX-WEGLD (OneDex LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 1327
+    },
+    "usd_value": 0.00031663519888374005
+   },
+   "underlying_assets": [
+    {
+     "balance": "426692041453962959",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": false,
+      "can_transfer_ownership": false,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "JEX-9040ca",
+       "decimals": 18
+      },
+      "timestamp": 1791977065,
+      "usd_price": 0.00037143643883322697,
+      "usdc_rate_now": 0.000371461869020543,
+      "usdc_rate_5m": 0.000371461869020543,
+      "usdc_rate_1h": 0.00036904070774318204,
+      "usdc_rate_24h": 0.000417197054990466,
+      "usdc_rate_7d": 0.00046094616548829,
+      "usdc_rate_30d": 0.0005070351435080401,
+      "usdc_tv_symbol": "COMPOSED:JEX/USDC",
+      "supply": "167831766747446592231491040",
+      "circulating_supply": "167556587169821274887711158",
+      "market_cap": 62245.14432392975,
+      "custom_name": "JEX",
+      "liquidity": "48661771720051337482286806",
+      "usd_liquidity": 18074.7551950113,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 21
+     },
+     "usd_value": 0.00015848897235613967
+    },
+    {
+     "balance": "42435251944613",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "WEGLD-bd4d79",
+       "decimals": 18
+      },
+      "timestamp": 1791977062,
+      "usd_price": 3.726765349102021,
+      "usdc_rate_now": 3.7270205,
+      "usdc_rate_5m": 3.7270205,
+      "usdc_rate_1h": 3.7229798,
+      "usdc_rate_24h": 3.7578876,
+      "usdc_rate_7d": 4.079079,
+      "usdc_rate_30d": 4.21554,
+      "usdc_tv_symbol": "XEXCHANGE:WEGLD/USDC",
+      "supply": "573886861758184786866773",
+      "circulating_supply": "573886861758184786866773",
+      "market_cap": 2139034.53622663,
+      "custom_name": "WrappedEGLD",
+      "liquidity": "486025397532067951964306",
+      "usd_liquidity": 1811302.6103060457,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 1
+     },
+     "usd_value": 0.00015814622652760038
+    }
+   ],
+   "protocol": "onedex",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "16318024739731619288",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "LPETHBTC-071be8",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 131.06318212583088,
+     "usdc_rate_now": 131.0721552930359,
+     "usdc_rate_5m": 131.0721552930359,
+     "usdc_rate_1h": 131.0721552930359,
+     "usdc_rate_24h": 131.0721552930359,
+     "usdc_rate_7d": 131.0721552930359,
+     "usdc_rate_30d": 131.0721552930359,
+     "usdc_tv_symbol": "JEXCHANGELPS:LPETHBTC/USDC",
+     "supply": "153522309009144127547",
+     "circulating_supply": "153522309009144127547",
+     "market_cap": 20123.877603055756,
+     "custom_name": "WETH-WBTC (JEXchange LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 1414
+    },
+    "usd_value": 2138.6922483972594
+   },
+   "underlying_assets": [
+    {
+     "balance": "429607665163184528",
+     "token": {
+      "can_add_special_roles": true,
+      "can_freeze": false,
+      "can_transfer_ownership": false,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "WETH-b4ca29",
+       "decimals": 18
+      },
+      "timestamp": 1791977068,
+      "usd_price": 2483.6279707284853,
+      "usdc_rate_now": 2483.798010923565,
+      "usdc_rate_5m": 2483.798010923565,
+      "usdc_rate_1h": 2480.16276962864,
+      "usdc_rate_24h": 2490.1117956079797,
+      "usdc_rate_7d": 2635.8498613125003,
+      "usdc_rate_30d": 2489.8372897524,
+      "usdc_tv_symbol": "COMPOSED:WETH/USDC",
+      "supply": "224784253049761530157",
+      "circulating_supply": "224784253049761530157",
+      "market_cap": 558356.9055870486,
+      "custom_name": "WrappedETH",
+      "liquidity": "23204821939179736537",
+      "usd_liquidity": 57632.144823920804,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 10
+     },
+     "usd_value": 1066.9856136386427
+    },
+    {
+     "balance": "1318334",
+     "token": {
+      "can_add_special_roles": true,
+      "can_freeze": false,
+      "can_transfer_ownership": false,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "WBTC-5349b3",
+       "decimals": 8
+      },
+      "timestamp": 1791977065,
+      "usd_price": 81292.44312681521,
+      "usdc_rate_now": 81298.0087683085,
+      "usdc_rate_5m": 81298.0087683085,
+      "usdc_rate_1h": 81209.8684256326,
+      "usdc_rate_24h": 81567.6823422852,
+      "usdc_rate_7d": 85935.772483155,
+      "usdc_rate_30d": 77456.44577957998,
+      "usdc_tv_symbol": "COMPOSED:WBTC/USDC",
+      "supply": "1621374778",
+      "circulating_supply": "1621374778",
+      "market_cap": 1318235.6552712133,
+      "custom_name": "WrappedBTC",
+      "liquidity": "93408197",
+      "usd_liquidity": 75933.80542200852,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 8
+     },
+     "usd_value": 1071.7066347586165
+    }
+   ],
+   "protocol": "jexchangelps",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "523066380294911466118",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "LPJEX3USD-25e943",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 1.0376070762574408,
+     "usdc_rate_now": 1.0376781154435597,
+     "usdc_rate_5m": 1.0376781154435597,
+     "usdc_rate_1h": 1.0376781154435597,
+     "usdc_rate_24h": 1.0376781154435597,
+     "usdc_rate_7d": 1.0376781154435597,
+     "usdc_rate_30d": 1.0376781154435597,
+     "usdc_tv_symbol": "JEXCHANGELPS:LPJEX3USD/USDC",
+     "supply": "533319812458454918660",
+     "circulating_supply": "533319812458454918660",
+     "market_cap": 553.4521871199055,
+     "custom_name": "WDAI-USDC-USDT (JEXchange LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 1559
+    },
+    "usd_value": 542.7373775463658
+   },
+   "underlying_assets": [
+    {
+     "balance": "499528620165532170067",
+     "token": {
+      "can_add_special_roles": true,
+      "can_freeze": false,
+      "can_transfer_ownership": false,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "WDAI-9eeb54",
+       "decimals": 18
+      },
+      "timestamp": 1791977074,
+      "usd_price": 0.9032278610114325,
+      "usdc_rate_now": 0.9032897,
+      "usdc_rate_5m": 0.9032897,
+      "usdc_rate_1h": 0.9032897,
+      "usdc_rate_24h": 0.90707195,
+      "usdc_rate_7d": 0.9407139,
+      "usdc_rate_30d": 0.9666913,
+      "usdc_tv_symbol": "JEXCHANGELPS:WDAI/USDC",
+      "supply": "-2703941439040434856343",
+      "circulating_supply": "-2703941439040434856343",
+      "market_cap": -2442.609671740009,
+      "custom_name": "WrappedDAI",
+      "liquidity": "7488886576224141799707",
+      "usd_liquidity": 6764.171003600161,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 35
+     },
+     "usd_value": 451.18816710610594
+    },
+    {
+     "balance": "44996108",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "USDC-c76f1f",
+       "decimals": 6
+      },
+      "timestamp": 0,
+      "usd_price": 0.9999315402483085,
+      "usdc_rate_now": 1.0,
+      "usdc_rate_5m": 1.0,
+      "usdc_rate_1h": 1.0,
+      "usdc_rate_24h": 1.0,
+      "usdc_rate_7d": 1.0,
+      "usdc_rate_30d": 1.0,
+      "usdc_tv_symbol": ":USDC/USDC",
+      "supply": "7198088467132",
+      "circulating_supply": "7198088467132",
+      "market_cap": 7198581.280218975,
+      "custom_name": "WrappedUSDC",
+      "liquidity": "938557151762",
+      "usd_liquidity": 938492.8983724421,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 2
+     },
+     "usd_value": 44.99302833885042
+    },
+    {
+     "balance": "46595329",
+     "token": {
+      "can_add_special_roles": true,
+      "can_freeze": false,
+      "can_transfer_ownership": false,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "USDT-f8c08c",
+       "decimals": 6
+      },
+      "timestamp": 1791977073,
+      "usd_price": 0.9991598330828065,
+      "usdc_rate_now": 0.99922824,
+      "usdc_rate_5m": 0.99922824,
+      "usdc_rate_1h": 0.99922824,
+      "usdc_rate_24h": 0.9988739,
+      "usdc_rate_7d": 0.9970484,
+      "usdc_rate_30d": 0.5,
+      "usdc_tv_symbol": "ASHSWAP:USDT/USDC",
+      "supply": "397988113639",
+      "circulating_supply": "397988113639",
+      "market_cap": 397708.1893363056,
+      "custom_name": "WrappedUSDT",
+      "liquidity": "115701885455",
+      "usd_liquidity": 115604.6765585838,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 7
+     },
+     "usd_value": 46.55618210140936
+    }
+   ],
+   "protocol": "jexchangelps",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "12100378699321",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "MXDOGWEGLD-75bcfe",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 1885565.0469199582,
+     "usdc_rate_now": 1885694.141072622,
+     "usdc_rate_5m": 1885694.141072622,
+     "usdc_rate_1h": 1885694.141072622,
+     "usdc_rate_24h": 1885694.141072622,
+     "usdc_rate_7d": 1885694.141072622,
+     "usdc_rate_30d": 1885694.141072622,
+     "usdc_tv_symbol": "XEXCHANGE:MXDOGWEGLD/USDC",
+     "supply": "136531933695952",
+     "circulating_supply": "136531933695952",
+     "market_cap": 257.4750941207826,
+     "custom_name": "MXDOGE-WEGLD (xExchange LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 1273
+    },
+    "usd_value": 22.81605112993446
+   },
+   "underlying_assets": [
+    {
+     "balance": "24596924281172",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": false,
+      "can_transfer_ownership": true,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "MXDOGE-378b61",
+       "decimals": 6
+      },
+      "timestamp": 1791977070,
+      "usd_price": 4.637988545727188e-07,
+      "usdc_rate_now": 4.6383060830099e-07,
+      "usdc_rate_5m": 4.6383060830099e-07,
+      "usdc_rate_1h": 4.63327740034244e-07,
+      "usdc_rate_24h": 4.67672042972328e-07,
+      "usdc_rate_7d": 7.274940722327701e-07,
+      "usdc_rate_30d": 7.815065247569999e-07,
+      "usdc_tv_symbol": "COMPOSED:MXDOGE/USDC",
+      "supply": "1000000000000000",
+      "circulating_supply": "1000000000000000",
+      "market_cap": 463.86236420326236,
+      "custom_name": "MultiversXDogeAI",
+      "liquidity": "337191637832039",
+      "usd_liquidity": 156.38909539799872,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 179
+     },
+     "usd_value": 11.408025307619628
+    },
+    {
+     "balance": "3061106550500595534",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "WEGLD-bd4d79",
+       "decimals": 18
+      },
+      "timestamp": 1791977062,
+      "usd_price": 3.726765349102021,
+      "usdc_rate_now": 3.7270205,
+      "usdc_rate_5m": 3.7270205,
+      "usdc_rate_1h": 3.7229798,
+      "usdc_rate_24h": 3.7578876,
+      "usdc_rate_7d": 4.079079,
+      "usdc_rate_30d": 4.21554,
+      "usdc_tv_symbol": "XEXCHANGE:WEGLD/USDC",
+      "supply": "573886861758184786866773",
+      "circulating_supply": "573886861758184786866773",
+      "market_cap": 2139034.53622663,
+      "custom_name": "WrappedEGLD",
+      "liquidity": "486025397532067951964306",
+      "usd_liquidity": 1811302.6103060457,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 1
+     },
+     "usd_value": 11.408025822314835
+    }
+   ],
+   "protocol": "xexchange",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "2789229562445",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "HUSDC-d80042",
+      "decimals": 8
+     },
+     "timestamp": 1791977068,
+     "usd_price": 0.028669727355920546,
+     "usdc_rate_now": 0.028671690212713083,
+     "usdc_rate_5m": 0.028671690212713083,
+     "usdc_rate_1h": 0.028671690212713083,
+     "usdc_rate_24h": 0.028671690212713083,
+     "usdc_rate_7d": 0.028671690212713083,
+     "usdc_rate_30d": 0.028671690212713083,
+     "usdc_tv_symbol": "",
+     "supply": "4297220422312902",
+     "circulating_supply": "4297220422312902",
+     "market_cap": 0.0,
+     "custom_name": "HatomUSDC",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 527
+    },
+    "usd_value": 799.6731508265452
+   },
+   "underlying_assets": [
+    {
+     "balance": "799727900",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "USDC-c76f1f",
+       "decimals": 6
+      },
+      "timestamp": 0,
+      "usd_price": 0.9999315402483085,
+      "usdc_rate_now": 1.0,
+      "usdc_rate_5m": 1.0,
+      "usdc_rate_1h": 1.0,
+      "usdc_rate_24h": 1.0,
+      "usdc_rate_7d": 1.0,
+      "usdc_rate_30d": 1.0,
+      "usdc_tv_symbol": ":USDC/USDC",
+      "supply": "7198088467132",
+      "circulating_supply": "7198088467132",
+      "market_cap": 7198581.280218975,
+      "custom_name": "WrappedUSDC",
+      "liquidity": "938557151762",
+      "usd_liquidity": 938492.8983724421,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 2
+     },
+     "usd_value": 799.6731508265452
+    }
+   ],
+   "protocol": "hatom",
+   "is_borrow": false,
+   "is_collateral": true,
+   "is_lending": true,
+   "is_farming": false,
+   "farming_type": null,
+   "farming_meta_esdt": null,
+   "pending_rewards": [],
+   "xexchange_farm": null
+  },
+  {
+   "lp_token": {
+    "balance": "45813163",
+    "token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "EGLDUSDC-594e5e",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 326119390795.7527,
+     "usdc_rate_now": 326141718376.80896,
+     "usdc_rate_5m": 326141718376.80896,
+     "usdc_rate_1h": 326141718376.80896,
+     "usdc_rate_24h": 326141718376.80896,
+     "usdc_rate_7d": 326141718376.80896,
+     "usdc_rate_30d": 326141718376.80896,
+     "usdc_tv_symbol": "XEXCHANGE:EGLDUSDC/USDC",
+     "supply": "4643103601336",
+     "circulating_supply": "4643103601336",
+     "market_cap": 1514413.463510943,
+     "custom_name": "WEGLD-USDC (xExchange LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 982
+    },
+    "usd_value": 14.942824752343036
+   },
+   "underlying_assets": [
+    {
+     "balance": "2004494404290020172",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "WEGLD-bd4d79",
+       "decimals": 18
+      },
+      "timestamp": 1791977062,
+      "usd_price": 3.726765349102021,
+      "usdc_rate_now": 3.7270205,
+      "usdc_rate_5m": 3.7270205,
+      "usdc_rate_1h": 3.7229798,
+      "usdc_rate_24h": 3.7578876,
+      "usdc_rate_7d": 4.079079,
+      "usdc_rate_30d": 4.21554,
+      "usdc_tv_symbol": "XEXCHANGE:WEGLD/USDC",
+      "supply": "573886861758184786866773",
+      "circulating_supply": "573886861758184786866773",
+      "market_cap": 2139034.53622663,
+      "custom_name": "WrappedEGLD",
+      "liquidity": "486025397532067951964306",
+      "usd_liquidity": 1811302.6103060457,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 1
+     },
+     "usd_value": 7.4702802883769435
+    },
+    {
+     "balance": "7470791",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "USDC-c76f1f",
+       "decimals": 6
+      },
+      "timestamp": 0,
+      "usd_price": 0.9999315402483085,
+      "usdc_rate_now": 1.0,
+      "usdc_rate_5m": 1.0,
+      "usdc_rate_1h": 1.0,
+      "usdc_rate_24h": 1.0,
+      "usdc_rate_7d": 1.0,
+      "usdc_rate_30d": 1.0,
+      "usdc_tv_symbol": ":USDC/USDC",
+      "supply": "7198088467132",
+      "circulating_supply": "7198088467132",
+      "market_cap": 7198581.280218975,
+      "custom_name": "WrappedUSDC",
+      "liquidity": "938557151762",
+      "usd_liquidity": 938492.8983724421,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 2
+     },
+     "usd_value": 7.470280519609575
+    }
+   ],
+   "protocol": "xexchange",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": true,
+   "farming_type": "standard",
+   "farming_meta_esdt": {
+    "balance": "45813163",
+    "id": "EGLDUSDCFL-45109b-01d64a"
+   },
+   "pending_rewards": [
+    {
+     "balance": "482482891164345301720705",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "MEX-455c57",
+       "decimals": 18
+      },
+      "timestamp": 1791977063,
+      "usd_price": 5.255404369848665e-07,
+      "usdc_rate_now": 5.25576417815925e-07,
+      "usdc_rate_5m": 5.25576417815925e-07,
+      "usdc_rate_1h": 5.24000434468682e-07,
+      "usdc_rate_24h": 5.27180410272012e-07,
+      "usdc_rate_7d": 6.092598462966901e-07,
+      "usdc_rate_30d": 3.115923978972e-06,
+      "usdc_tv_symbol": "COMPOSED:MEX/USDC",
+      "supply": "3975566473693294785956306680815",
+      "circulating_supply": "3975566473693294785956306680815",
+      "market_cap": 2089607.0400119026,
+      "custom_name": "MEX",
+      "liquidity": "623249066604943787942402642513",
+      "usd_liquidity": 327542.5868139724,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 4
+     },
+     "usd_value": 0.2535642694602318
+    }
+   ],
+   "xexchange_farm": {
+    "address": "erd1qqqqqqqqqqqqqpgqv0pz5z3fkz54nml6pkzzdruuf020gqzykp2sya7kkv",
+    "farmed_token": {
+     "can_add_special_roles": false,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "MEX-455c57",
+      "decimals": 18
+     },
+     "timestamp": 1791977063,
+     "usd_price": 5.255404369848665e-07,
+     "usdc_rate_now": 5.25576417815925e-07,
+     "usdc_rate_5m": 5.25576417815925e-07,
+     "usdc_rate_1h": 5.24000434468682e-07,
+     "usdc_rate_24h": 5.27180410272012e-07,
+     "usdc_rate_7d": 6.092598462966901e-07,
+     "usdc_rate_30d": 3.115923978972e-06,
+     "usdc_tv_symbol": "COMPOSED:MEX/USDC",
+     "supply": "3975566473693294785956306680815",
+     "circulating_supply": "3975566473693294785956306680815",
+     "market_cap": 2089607.0400119026,
+     "custom_name": "MEX",
+     "liquidity": "623249066604943787942402642513",
+     "usd_liquidity": 327542.5868139724,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 4
+    },
+    "farming_token": {
+     "can_add_special_roles": true,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "EGLDUSDC-594e5e",
+      "decimals": 18
+     },
+     "timestamp": 1791977075,
+     "usd_price": 326119390795.7527,
+     "usdc_rate_now": 326141718376.80896,
+     "usdc_rate_5m": 326141718376.80896,
+     "usdc_rate_1h": 326141718376.80896,
+     "usdc_rate_24h": 326141718376.80896,
+     "usdc_rate_7d": 326141718376.80896,
+     "usdc_rate_30d": 326141718376.80896,
+     "usdc_tv_symbol": "XEXCHANGE:EGLDUSDC/USDC",
+     "supply": "4643103601336",
+     "circulating_supply": "4643103601336",
+     "market_cap": 1514413.463510943,
+     "custom_name": "WEGLD-USDC (xExchange LP)",
+     "liquidity": "0",
+     "usd_liquidity": 0.0,
+     "total_burned": null,
+     "is_lp_token": true,
+     "rank_per_tvl": 982
+    },
+    "reward_per_share": "35187903887340608079480428065"
+   }
+  },
+  {
+   "lp_token": {
+    "balance": "3200000000000000000000000",
+    "token": {
+     "can_add_special_roles": false,
+     "can_freeze": false,
+     "can_transfer_ownership": true,
+     "can_upgrade": false,
+     "description": null,
+     "token": {
+      "id": "BOD-204877",
+      "decimals": 18
+     },
+     "timestamp": 1791977064,
+     "usd_price": 6.66776495761451e-07,
+     "usdc_rate_now": 6.66822146240005e-07,
+     "usdc_rate_5m": 6.66822146240005e-07,
+     "usdc_rate_1h": 6.66099201934678e-07,
+     "usdc_rate_24h": 6.72344752265436e-07,
+     "usdc_rate_7d": 8.3758511038878e-07,
+     "usdc_rate_30d": 8.72485044375e-07,
+     "usdc_tv_symbol": "COMPOSED:BOD/USDC",
+     "supply": "6186988538720230018807245906",
+     "circulating_supply": "6186988538720230018807245906",
+     "market_cap": 4125.903434476363,
+     "custom_name": "bodcoin",
+     "liquidity": "2156271264912670743408988427",
+     "usd_liquidity": 1437.7509979295821,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 86
+    },
+    "usd_value": 2.133500001636511
+   },
+   "underlying_assets": [
+    {
+     "balance": "3200000000000000000000000",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": false,
+      "can_transfer_ownership": true,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "BOD-204877",
+       "decimals": 18
+      },
+      "timestamp": 1791977064,
+      "usd_price": 6.66776495761451e-07,
+      "usdc_rate_now": 6.66822146240005e-07,
+      "usdc_rate_5m": 6.66822146240005e-07,
+      "usdc_rate_1h": 6.66099201934678e-07,
+      "usdc_rate_24h": 6.72344752265436e-07,
+      "usdc_rate_7d": 8.3758511038878e-07,
+      "usdc_rate_30d": 8.72485044375e-07,
+      "usdc_tv_symbol": "COMPOSED:BOD/USDC",
+      "supply": "6186988538720230018807245906",
+      "circulating_supply": "6186988538720230018807245906",
+      "market_cap": 4125.903434476363,
+      "custom_name": "bodcoin",
+      "liquidity": "2156271264912670743408988427",
+      "usd_liquidity": 1437.7509979295821,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 86
+     },
+     "usd_value": 2.133500001636511
+    }
+   ],
+   "protocol": "xexchange",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": true,
+   "farming_type": "metastaking",
+   "farming_meta_esdt": {
+    "balance": "3200000000000000000000000",
+    "id": "SBOD-0bcb5c-0de0"
+   },
+   "pending_rewards": [
+    {
+     "balance": "635247911881600000000000",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": false,
+      "can_transfer_ownership": true,
+      "can_upgrade": false,
+      "description": null,
+      "token": {
+       "id": "BOD-204877",
+       "decimals": 18
+      },
+      "timestamp": 1791977064,
+      "usd_price": 6.66776495761451e-07,
+      "usdc_rate_now": 6.66822146240005e-07,
+      "usdc_rate_5m": 6.66822146240005e-07,
+      "usdc_rate_1h": 6.66099201934678e-07,
+      "usdc_rate_24h": 6.72344752265436e-07,
+      "usdc_rate_7d": 8.3758511038878e-07,
+      "usdc_rate_30d": 8.72485044375e-07,
+      "usdc_tv_symbol": "COMPOSED:BOD/USDC",
+      "supply": "6186988538720230018807245906",
+      "circulating_supply": "6186988538720230018807245906",
+      "market_cap": 4125.903434476363,
+      "custom_name": "bodcoin",
+      "liquidity": "2156271264912670743408988427",
+      "usd_liquidity": 1437.7509979295821,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 86
+     },
+     "usd_value": 0.42356837662419233
+    }
+   ],
+   "xexchange_farm": {
+    "address": "erd1qqqqqqqqqqqqqpgqazrruw6kh5cr3xdumyqx49ac09gr5sj7kp2s30u6hl",
+    "farmed_token": {
+     "can_add_special_roles": false,
+     "can_freeze": false,
+     "can_transfer_ownership": true,
+     "can_upgrade": false,
+     "description": null,
+     "token": {
+      "id": "BOD-204877",
+      "decimals": 18
+     },
+     "timestamp": 1791977064,
+     "usd_price": 6.66776495761451e-07,
+     "usdc_rate_now": 6.66822146240005e-07,
+     "usdc_rate_5m": 6.66822146240005e-07,
+     "usdc_rate_1h": 6.66099201934678e-07,
+     "usdc_rate_24h": 6.72344752265436e-07,
+     "usdc_rate_7d": 8.3758511038878e-07,
+     "usdc_rate_30d": 8.72485044375e-07,
+     "usdc_tv_symbol": "COMPOSED:BOD/USDC",
+     "supply": "6186988538720230018807245906",
+     "circulating_supply": "6186988538720230018807245906",
+     "market_cap": 4125.903434476363,
+     "custom_name": "bodcoin",
+     "liquidity": "2156271264912670743408988427",
+     "usd_liquidity": 1437.7509979295821,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 86
+    },
+    "farming_token": {
+     "can_add_special_roles": false,
+     "can_freeze": false,
+     "can_transfer_ownership": true,
+     "can_upgrade": false,
+     "description": null,
+     "token": {
+      "id": "BOD-204877",
+      "decimals": 18
+     },
+     "timestamp": 1791977064,
+     "usd_price": 6.66776495761451e-07,
+     "usdc_rate_now": 6.66822146240005e-07,
+     "usdc_rate_5m": 6.66822146240005e-07,
+     "usdc_rate_1h": 6.66099201934678e-07,
+     "usdc_rate_24h": 6.72344752265436e-07,
+     "usdc_rate_7d": 8.3758511038878e-07,
+     "usdc_rate_30d": 8.72485044375e-07,
+     "usdc_tv_symbol": "COMPOSED:BOD/USDC",
+     "supply": "6186988538720230018807245906",
+     "circulating_supply": "6186988538720230018807245906",
+     "market_cap": 4125.903434476363,
+     "custom_name": "bodcoin",
+     "liquidity": "2156271264912670743408988427",
+     "usd_liquidity": 1437.7509979295821,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 86
+    },
+    "reward_per_share": "198514972463"
+   }
+  },
+  {
+   "lp_token": {
+    "balance": "1170554953907997187672",
+    "token": {
+     "can_add_special_roles": false,
+     "can_freeze": false,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "ITHEUM-df6f26",
+      "decimals": 18
+     },
+     "timestamp": 1791977068,
+     "usd_price": 0.00021372481256716567,
+     "usdc_rate_now": 0.00021373944511650502,
+     "usdc_rate_5m": 0.00021373944511650502,
+     "usdc_rate_1h": 0.000213507716588078,
+     "usdc_rate_24h": 0.000215509630396236,
+     "usdc_rate_7d": 0.00022812991699878,
+     "usdc_rate_30d": 0.000253526369586,
+     "usdc_tv_symbol": "COMPOSED:ITHEUM/USDC",
+     "supply": "850000000000000000000000000",
+     "circulating_supply": "827499708265923331476311138",
+     "market_cap": 176881.43773813458,
+     "custom_name": "Itheum",
+     "liquidity": "157666203888498320587913454",
+     "usd_liquidity": 33697.17987424583,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 15
+    },
+    "usd_value": 0.25015496726696634
+   },
+   "underlying_assets": [
+    {
+     "balance": "1170554953907997187672",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": false,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "ITHEUM-df6f26",
+       "decimals": 18
+      },
+      "timestamp": 1791977068,
+      "usd_price": 0.00021372481256716567,
+      "usdc_rate_now": 0.00021373944511650502,
+      "usdc_rate_5m": 0.00021373944511650502,
+      "usdc_rate_1h": 0.000213507716588078,
+      "usdc_rate_24h": 0.000215509630396236,
+      "usdc_rate_7d": 0.00022812991699878,
+      "usdc_rate_30d": 0.000253526369586,
+      "usdc_tv_symbol": "COMPOSED:ITHEUM/USDC",
+      "supply": "850000000000000000000000000",
+      "circulating_supply": "827499708265923331476311138",
+      "market_cap": 176881.43773813458,
+      "custom_name": "Itheum",
+      "liquidity": "157666203888498320587913454",
+      "usd_liquidity": 33697.17987424583,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 15
+     },
+     "usd_value": 0.25015496726696634
+    }
+   ],
+   "protocol": "xexchange",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": true,
+   "farming_type": "metastaking",
+   "farming_meta_esdt": {
+    "balance": "1170554953907997187672",
+    "id": "SITHEUM-e05083-04550f"
+   },
+   "pending_rewards": [
+    {
+     "balance": "0",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": false,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "ITHEUM-df6f26",
+       "decimals": 18
+      },
+      "timestamp": 1791977068,
+      "usd_price": 0.00021372481256716567,
+      "usdc_rate_now": 0.00021373944511650502,
+      "usdc_rate_5m": 0.00021373944511650502,
+      "usdc_rate_1h": 0.000213507716588078,
+      "usdc_rate_24h": 0.000215509630396236,
+      "usdc_rate_7d": 0.00022812991699878,
+      "usdc_rate_30d": 0.000253526369586,
+      "usdc_tv_symbol": "COMPOSED:ITHEUM/USDC",
+      "supply": "850000000000000000000000000",
+      "circulating_supply": "827499708265923331476311138",
+      "market_cap": 176881.43773813458,
+      "custom_name": "Itheum",
+      "liquidity": "157666203888498320587913454",
+      "usd_liquidity": 33697.17987424583,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 15
+     },
+     "usd_value": 0.0
+    }
+   ],
+   "xexchange_farm": {
+    "address": "erd1qqqqqqqqqqqqqpgqzps75vsk97w9nsx2cenv2r2tyxl4fl402jpsx78m9j",
+    "farmed_token": {
+     "can_add_special_roles": false,
+     "can_freeze": false,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "ITHEUM-df6f26",
+      "decimals": 18
+     },
+     "timestamp": 1791977068,
+     "usd_price": 0.00021372481256716567,
+     "usdc_rate_now": 0.00021373944511650502,
+     "usdc_rate_5m": 0.00021373944511650502,
+     "usdc_rate_1h": 0.000213507716588078,
+     "usdc_rate_24h": 0.000215509630396236,
+     "usdc_rate_7d": 0.00022812991699878,
+     "usdc_rate_30d": 0.000253526369586,
+     "usdc_tv_symbol": "COMPOSED:ITHEUM/USDC",
+     "supply": "850000000000000000000000000",
+     "circulating_supply": "827499708265923331476311138",
+     "market_cap": 176881.43773813458,
+     "custom_name": "Itheum",
+     "liquidity": "157666203888498320587913454",
+     "usd_liquidity": 33697.17987424583,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 15
+    },
+    "farming_token": {
+     "can_add_special_roles": false,
+     "can_freeze": false,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "ITHEUM-df6f26",
+      "decimals": 18
+     },
+     "timestamp": 1791977068,
+     "usd_price": 0.00021372481256716567,
+     "usdc_rate_now": 0.00021373944511650502,
+     "usdc_rate_5m": 0.00021373944511650502,
+     "usdc_rate_1h": 0.000213507716588078,
+     "usdc_rate_24h": 0.000215509630396236,
+     "usdc_rate_7d": 0.00022812991699878,
+     "usdc_rate_30d": 0.000253526369586,
+     "usdc_tv_symbol": "COMPOSED:ITHEUM/USDC",
+     "supply": "850000000000000000000000000",
+     "circulating_supply": "827499708265923331476311138",
+     "market_cap": 176881.43773813458,
+     "custom_name": "Itheum",
+     "liquidity": "157666203888498320587913454",
+     "usd_liquidity": 33697.17987424583,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 15
+    },
+    "reward_per_share": "395382995454"
+   }
+  },
+  {
+   "lp_token": {
+    "balance": "598550055",
+    "token": {
+     "can_add_special_roles": false,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "TTG-1abcec",
+      "decimals": 6
+     },
+     "timestamp": 1791977073,
+     "usd_price": 0.001004914450178127,
+     "usdc_rate_now": 0.00100498325108195,
+     "usdc_rate_5m": 0.00100498325108195,
+     "usdc_rate_1h": 0.0010038936848124202,
+     "usdc_rate_24h": 0.00101330649977604,
+     "usdc_rate_7d": 0.0010711433025576,
+     "usdc_rate_30d": 0.001122496285932,
+     "usdc_tv_symbol": "COMPOSED:TTG/USDC",
+     "supply": "126000000000000",
+     "circulating_supply": "126000000000000",
+     "market_cap": 126636.55914371973,
+     "custom_name": "TrustTrading",
+     "liquidity": "1752167926745",
+     "usd_liquidity": 1760.7788687247003,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 75
+    },
+    "usd_value": 0.6014394740069571
+   },
+   "underlying_assets": [
+    {
+     "balance": "598550055",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "TTG-1abcec",
+       "decimals": 6
+      },
+      "timestamp": 1791977073,
+      "usd_price": 0.001004914450178127,
+      "usdc_rate_now": 0.00100498325108195,
+      "usdc_rate_5m": 0.00100498325108195,
+      "usdc_rate_1h": 0.0010038936848124202,
+      "usdc_rate_24h": 0.00101330649977604,
+      "usdc_rate_7d": 0.0010711433025576,
+      "usdc_rate_30d": 0.001122496285932,
+      "usdc_tv_symbol": "COMPOSED:TTG/USDC",
+      "supply": "126000000000000",
+      "circulating_supply": "126000000000000",
+      "market_cap": 126636.55914371973,
+      "custom_name": "TrustTrading",
+      "liquidity": "1752167926745",
+      "usd_liquidity": 1760.7788687247003,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 75
+     },
+     "usd_value": 0.6014394740069571
+    }
+   ],
+   "protocol": "xexchange",
+   "is_borrow": false,
+   "is_collateral": false,
+   "is_lending": false,
+   "is_farming": true,
+   "farming_type": "metastaking",
+   "farming_meta_esdt": {
+    "balance": "598550055",
+    "id": "STTG-4612fd-0df0"
+   },
+   "pending_rewards": [
+    {
+     "balance": "105269061",
+     "token": {
+      "can_add_special_roles": false,
+      "can_freeze": true,
+      "can_transfer_ownership": true,
+      "can_upgrade": true,
+      "description": null,
+      "token": {
+       "id": "TTG-1abcec",
+       "decimals": 6
+      },
+      "timestamp": 1791977073,
+      "usd_price": 0.001004914450178127,
+      "usdc_rate_now": 0.00100498325108195,
+      "usdc_rate_5m": 0.00100498325108195,
+      "usdc_rate_1h": 0.0010038936848124202,
+      "usdc_rate_24h": 0.00101330649977604,
+      "usdc_rate_7d": 0.0010711433025576,
+      "usdc_rate_30d": 0.001122496285932,
+      "usdc_tv_symbol": "COMPOSED:TTG/USDC",
+      "supply": "126000000000000",
+      "circulating_supply": "126000000000000",
+      "market_cap": 126636.55914371973,
+      "custom_name": "TrustTrading",
+      "liquidity": "1752167926745",
+      "usd_liquidity": 1760.7788687247003,
+      "total_burned": null,
+      "is_lp_token": false,
+      "rank_per_tvl": 75
+     },
+     "usd_value": 0.10578640055558271
+    }
+   ],
+   "xexchange_farm": {
+    "address": "erd1qqqqqqqqqqqqqpgqlrl09kdjlwjdwrk8amtv5slavcundcn8x9rsjhfg4r",
+    "farmed_token": {
+     "can_add_special_roles": false,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "TTG-1abcec",
+      "decimals": 6
+     },
+     "timestamp": 1791977073,
+     "usd_price": 0.001004914450178127,
+     "usdc_rate_now": 0.00100498325108195,
+     "usdc_rate_5m": 0.00100498325108195,
+     "usdc_rate_1h": 0.0010038936848124202,
+     "usdc_rate_24h": 0.00101330649977604,
+     "usdc_rate_7d": 0.0010711433025576,
+     "usdc_rate_30d": 0.001122496285932,
+     "usdc_tv_symbol": "COMPOSED:TTG/USDC",
+     "supply": "126000000000000",
+     "circulating_supply": "126000000000000",
+     "market_cap": 126636.55914371973,
+     "custom_name": "TrustTrading",
+     "liquidity": "1752167926745",
+     "usd_liquidity": 1760.7788687247003,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 75
+    },
+    "farming_token": {
+     "can_add_special_roles": false,
+     "can_freeze": true,
+     "can_transfer_ownership": true,
+     "can_upgrade": true,
+     "description": null,
+     "token": {
+      "id": "TTG-1abcec",
+      "decimals": 6
+     },
+     "timestamp": 1791977073,
+     "usd_price": 0.001004914450178127,
+     "usdc_rate_now": 0.00100498325108195,
+     "usdc_rate_5m": 0.00100498325108195,
+     "usdc_rate_1h": 0.0010038936848124202,
+     "usdc_rate_24h": 0.00101330649977604,
+     "usdc_rate_7d": 0.0010711433025576,
+     "usdc_rate_30d": 0.001122496285932,
+     "usdc_tv_symbol": "COMPOSED:TTG/USDC",
+     "supply": "126000000000000",
+     "circulating_supply": "126000000000000",
+     "market_cap": 126636.55914371973,
+     "custom_name": "TrustTrading",
+     "liquidity": "1752167926745",
+     "usd_liquidity": 1760.7788687247003,
+     "total_burned": null,
+     "is_lp_token": false,
+     "rank_per_tvl": 75
+    },
+    "reward_per_share": "474004585431"
+   }
+  }
+ ]
+}

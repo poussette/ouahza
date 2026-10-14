@@ -12,7 +12,7 @@ UI markup, or (d) poison totals with NaN/inf/absurd numbers.
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -82,6 +82,7 @@ _SENSITIVE_ENV = (
     "SOLANA_RPC_URL",
     "MULTIVERSX_GATEWAY_URL",
     "MULTIVERSX_GATEWAY_KEY",
+    "WALLET_DATA_API_TOKEN",
 )
 _QUERY_SECRET_RE = re.compile(
     r"(?i)((?:api[-_]?key|apikey|access[-_]?token|token|secret|auth|key)=)[^&\s\"'<>)]+"

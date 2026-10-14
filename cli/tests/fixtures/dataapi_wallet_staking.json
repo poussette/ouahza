@@ -1,0 +1,220 @@
+{
+ "address": "erd1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+ "all_assets": [],
+ "staking_delegations": [
+  {
+   "active_stake": "115196947916632757345",
+   "address": "erd1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqpd8llllszyfqlk",
+   "staking_provider": {
+    "apr": 9.15009529387433,
+    "avatar": "https://raw.githubusercontent.com/multiversx/mx-assets/master/identities/Synexis/logo.png",
+    "contract": "erd1qqqqqqqqqqqqqqqpqqqqqqqqqqqqqqqqqqqqqqqqqqqqpd8llllszyfqlk",
+    "name": "Synexis (stable APR)",
+    "service_fee": 200.0
+   },
+   "usd_value": 429.0
+  }
+ ],
+ "tokens": [
+  {
+   "balance": "1146911159893964",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": false,
+    "description": null,
+    "token": {
+     "id": "BUSD-40b57e",
+     "decimals": 18
+    },
+    "timestamp": 1791977177,
+    "usd_price": 0.06069834898797349,
+    "usdc_rate_now": 0.06070250466637,
+    "usdc_rate_5m": 0.06070250466637,
+    "usdc_rate_1h": 0.060636693219772,
+    "usdc_rate_24h": 0.061205241445464,
+    "usdc_rate_7d": 0.06643653074406,
+    "usdc_rate_30d": 0.0686590901556,
+    "usdc_tv_symbol": "",
+    "supply": "21979270664289609133355",
+    "circulating_supply": "21979270664289609133355",
+    "market_cap": 0.0,
+    "custom_name": "WrappedBUSD",
+    "liquidity": "0",
+    "usd_liquidity": 0.0,
+    "total_burned": "0",
+    "is_lp_token": false,
+    "rank_per_tvl": 409
+   },
+   "usd_value": 6.961561384144529e-05
+  },
+  {
+   "balance": "1730965152849134",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "HTM-f51d55",
+     "decimals": 18
+    },
+    "timestamp": 1791977180,
+    "usd_price": 0.03408670274141697,
+    "usdc_rate_now": 0.034089036468389,
+    "usdc_rate_5m": 0.034089036468389,
+    "usdc_rate_1h": 0.0340521156053464,
+    "usdc_rate_24h": 0.0349495872671328,
+    "usdc_rate_7d": 0.030975555105198,
+    "usdc_rate_30d": 0.029880929135862,
+    "usdc_tv_symbol": "COMPOSED:HTM/USDC",
+    "supply": "100006500000000000000000000",
+    "circulating_supply": "97029512595512464310076888",
+    "market_cap": 3307869.0492721745,
+    "custom_name": "Hatom",
+    "liquidity": "4647063405869614013616362",
+    "usd_liquidity": 158403.06893639427,
+    "total_burned": "0",
+    "is_lp_token": false,
+    "rank_per_tvl": 5
+   },
+   "usd_value": 5.900289462091983e-05
+  },
+  {
+   "balance": "500000000",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "NUTS-8ad81a",
+     "decimals": 6
+    },
+    "timestamp": 1791977183,
+    "usd_price": 3.4761101925755824e-06,
+    "usdc_rate_now": 3.47634818250895e-06,
+    "usdc_rate_5m": 3.47634818250895e-06,
+    "usdc_rate_1h": 3.47257925231362e-06,
+    "usdc_rate_24h": 3.50513922001044e-06,
+    "usdc_rate_7d": 4.2233136018084e-06,
+    "usdc_rate_30d": 4.71226340151e-06,
+    "usdc_tv_symbol": "COMPOSED:NUTS/USDC",
+    "supply": "674264039270777",
+    "circulating_supply": "674264039270777",
+    "market_cap": 2344.1370464902425,
+    "custom_name": "NUTS",
+    "liquidity": "37548557885552",
+    "usd_liquidity": 130.52292478248157,
+    "total_burned": "0",
+    "is_lp_token": false,
+    "rank_per_tvl": 188
+   },
+   "usd_value": 0.0017380550962877912
+  },
+  {
+   "balance": "3325",
+   "token": {
+    "can_add_special_roles": false,
+    "can_freeze": true,
+    "can_transfer_ownership": true,
+    "can_upgrade": true,
+    "description": null,
+    "token": {
+     "id": "USDC-c76f1f",
+     "decimals": 6
+    },
+    "timestamp": 0,
+    "usd_price": 0.9999315402483085,
+    "usdc_rate_now": 1.0,
+    "usdc_rate_5m": 1.0,
+    "usdc_rate_1h": 1.0,
+    "usdc_rate_24h": 1.0,
+    "usdc_rate_7d": 1.0,
+    "usdc_rate_30d": 1.0,
+    "usdc_tv_symbol": ":USDC/USDC",
+    "supply": "7198088467132",
+    "circulating_supply": "7198088467132",
+    "market_cap": 7198581.280218975,
+    "custom_name": "WrappedUSDC",
+    "liquidity": "938557151762",
+    "usd_liquidity": 938492.8983724421,
+    "total_burned": "0",
+    "is_lp_token": false,
+    "rank_per_tvl": 2
+   },
+   "usd_value": 0.0033247723713256258
+  },
+  {
+   "balance": "35521882687",
+   "token": {
+    "can_add_special_roles": true,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": false,
+    "description": null,
+    "token": {
+     "id": "WETH-b4ca29",
+     "decimals": 18
+    },
+    "timestamp": 1791977181,
+    "usd_price": 2483.6263682193853,
+    "usdc_rate_now": 2483.79640830475,
+    "usdc_rate_5m": 2483.79640830475,
+    "usdc_rate_1h": 2480.16276962864,
+    "usdc_rate_24h": 2490.1117956079797,
+    "usdc_rate_7d": 2635.8498613125003,
+    "usdc_rate_30d": 2489.8372897524,
+    "usdc_tv_symbol": "COMPOSED:WETH/USDC",
+    "supply": "224784253049761530157",
+    "circulating_supply": "224784253049761530157",
+    "market_cap": 558356.5453189116,
+    "custom_name": "WrappedETH",
+    "liquidity": "23204827260218813181",
+    "usd_liquidity": 57632.12085345544,
+    "total_burned": "0",
+    "is_lp_token": false,
+    "rank_per_tvl": 10
+   },
+   "usd_value": 8.822308449022887e-05
+  },
+  {
+   "balance": "602143029150753271",
+   "token": {
+    "can_add_special_roles": false,
+    "can_freeze": false,
+    "can_transfer_ownership": false,
+    "can_upgrade": false,
+    "description": null,
+    "token": {
+     "id": "EGLD",
+     "decimals": 18
+    },
+    "timestamp": 1791977175,
+    "usd_price": 3.726765349102021,
+    "usdc_rate_now": 3.7270205,
+    "usdc_rate_5m": 3.7270205,
+    "usdc_rate_1h": 3.7229798,
+    "usdc_rate_24h": 3.7578876,
+    "usdc_rate_7d": 4.079079,
+    "usdc_rate_30d": 4.21554,
+    "usdc_tv_symbol": "XEXCHANGE:WEGLD/USDC",
+    "supply": "0",
+    "circulating_supply": null,
+    "market_cap": 0.0,
+    "custom_name": "EGLD",
+    "liquidity": null,
+    "usd_liquidity": null,
+    "total_burned": null,
+    "is_lp_token": false,
+    "rank_per_tvl": 1
+   },
+   "usd_value": 2.2440457762423556
+  }
+ ],
+ "defi_positions": []
+}

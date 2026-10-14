@@ -5,7 +5,7 @@ config format directly instead of pointing at a file on disk)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.31"
+__version__ = "0.1.32"
 
 
 
@@ -312,7 +312,7 @@ def filter_dust(results: list[WalletBalance], threshold_usd: float = DUST_THRESH
     `threshold_usd`. Unpriced entries are left alone (filter_unpriced handles
     them). Totals and JSON data stay intact; only the display skips them."""
     for w in results:
-        kept = [t for t in w.tokens if t.usd_value is None or t.usd_value >= threshold_usd]
+        kept = [t for t in w.tokens if t.usd_value is None or abs(t.usd_value) >= threshold_usd]
         w.hidden_dust_count = len(w.tokens) - len(kept)
         w.tokens = kept
         if not w.error and w.native_usd_value is not None and w.native_usd_value < threshold_usd:
