@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.38"
+__version__ = "0.1.39"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.38"
+APP_VERSION = "0.1.39"
 
 
 def _version_problems() -> list[str]:
@@ -1654,6 +1654,7 @@ class OuahzaApp(App):
                     Clock.schedule_once(lambda dt: setattr(
                         self.status_label, "text", f"Valorisation des LP : {done}/{total} ({ok} valorisés)..."))
 
+                Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Recherche des prix..."))
                 priced_ok = _pricing.apply_pricing(results, on_progress=_lp_progress) is not False
                 notes = [clean_text(n, 120) for n in _pricing.LAST_NOTES]
                 n_inc = report.count_incomplete(results)

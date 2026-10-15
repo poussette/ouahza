@@ -36,7 +36,7 @@ left to the local pool reader (lp.py), as before.
 
 from __future__ import annotations
 
-__version__ = "0.1.38"
+__version__ = "0.1.39"
 
 import os
 import time

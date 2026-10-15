@@ -49,7 +49,7 @@ are already picked up by the normal token scan above.)
 
 from __future__ import annotations
 
-__version__ = "0.1.38"
+__version__ = "0.1.39"
 
 
 
@@ -82,6 +82,8 @@ JUPITER_TOKEN_SEARCH = "https://lite-api.jup.ag/tokens/v2/search"
 _META_CHUNK = 50          # mints per request
 _META_MAX_MINTS = 200     # per wallet; airdrop-spam beyond that keeps its short form
 _META_RETRY_AFTER = 60.0  # seconds without retrying after a failed lookup
+#: name given to a token Jupiter does not know (usually airdrop spam)
+UNKNOWN_TOKEN_NAME = "Unknown SPL token"
 SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 STAKE_PROGRAM_ID = "Stake11111111111111111111111111111111111111"
 # Stake account layout: 4-byte enum tag + 8-byte rent_exempt_reserve, then
@@ -229,7 +231,7 @@ class SolanaProvider(BaseProvider):
             wallet.tokens.append(
                 TokenBalance(
                     symbol=clean_text(meta.get("symbol"), 40) or (mint[:6] + "…"),
-                    name=clean_text(meta.get("name"), 120) or "Unknown SPL token",
+                    name=clean_text(meta.get("name"), 120) or UNKNOWN_TOKEN_NAME,
                     amount=amount,
                     contract=mint,
                 )

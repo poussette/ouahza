@@ -25,7 +25,7 @@ address, its platform id to TOKEN_PLATFORM_IDS.
 
 from __future__ import annotations
 
-__version__ = "0.1.38"
+__version__ = "0.1.39"
 
 
 
@@ -42,6 +42,7 @@ import requests
 from providers.base import TokenBalance, WalletBalance
 from providers.net import request_json
 from providers import lp as lp_module
+from providers.solana import UNKNOWN_TOKEN_NAME
 from providers.safe import MAX_POSITION_USD, safe_decimals, safe_price
 
 COINGECKO_API = "https://api.coingecko.com/api/v3"
@@ -50,6 +51,15 @@ FX_API = "https://api.frankfurter.app"  # free, no key, ECB-sourced FX rates
 
 #: hard stop for paginated endpoints (hostile/buggy API repeating full pages).
 MAX_PAGES = 20
+#: CoinGecko's free tier is slow (one call every 1.5 s, and a refused call is
+#: retried several times), so the token price pass is bounded: a wallet full of
+#: airdrop spam (thousands of tokens) must not keep the refresh running for
+#: minutes. Tokens the pass does not reach stay unpriced, with a note.
+MAX_CONTRACTS_PER_CHAIN = 250     # = 5 requests of 50
+TOKEN_PRICE_BUDGET = 45.0         # seconds after which no new request is started
+TOKEN_FAIL_LIMIT = 2              # consecutive refused requests after which the pass stops
+_SKIPPED: dict[str, int] = {}     # chain -> tokens left unpriced by those limits
+_skipped_lock = threading.Lock()
 #: a USD->EUR rate outside this range is an API glitch, not a real FX rate.
 FX_MIN, FX_MAX = 0.05, 20.0
 
@@ -185,8 +195,20 @@ def _fetch_native_prices(chain_ids: set[str]) -> dict[str, dict[str, float]]:
         return result
 
 
+def _note_skipped(chain_id: str, count: int) -> None:
+    if count > 0:
+        with _skipped_lock:
+            _SKIPPED[chain_id] = _SKIPPED.get(chain_id, 0) + count
+
+
+def _by_priority(tokens) -> list:
+    """Tokens most likely to have a price first: those the provider could name
+    come before the unnamed ones (airdrop spam), the order is otherwise kept."""
+    return sorted(tokens, key=lambda t: 1 if t.name == UNKNOWN_TOKEN_NAME else 0)
+
+
 def _fetch_token_prices(
-    chain_id: str, contracts: set[str]
+    chain_id: str, contracts
 ) -> dict[str, dict[str, float]]:
     """Return {contract_address_lowercase: {"usd": ..., "eur": ...}}."""
     platform = TOKEN_PLATFORM_IDS.get(chain_id)
@@ -210,7 +232,12 @@ def _fetch_token_prices(
             elif hit:
                 _store(c, hit)
         chunk_size = 50  # keep query strings/URLs reasonably sized
+        started = time.monotonic()
+        failures = 0
         for i in range(0, len(todo), chunk_size):
+            if failures >= TOKEN_FAIL_LIMIT or time.monotonic() - started > TOKEN_PRICE_BUDGET:
+                _note_skipped(chain_id, len(todo) - i)
+                break
             chunk = todo[i : i + chunk_size]
             try:
                 data = request_json(
@@ -222,9 +249,12 @@ def _fetch_token_prices(
                     },
                 )
                 if not isinstance(data, dict):
+                    failures += 1
                     continue
             except requests.RequestException:
+                failures += 1
                 continue
+            failures = 0
             for addr, vals in data.items():
                 if isinstance(addr, str):
                     _store(addr, _clean_price_map(vals))
@@ -459,19 +489,26 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
     t_start = time.monotonic()
     chain_ids = {w.chain for w in results if not w.error}
 
-    contracts_by_chain: dict[str, set[str]] = {}
+    with _skipped_lock:
+        _SKIPPED.clear()
+    ordered: dict[str, dict[str, None]] = {}     # chain -> contracts, most promising first
     multiversx_identifiers: set[str] = set()
     for w in results:
-        for tok in w.tokens:
+        for tok in _by_priority(w.tokens):
             if tok.price_locked:
                 continue
             if tok.asset_type in CONTRACT_PRICED_TYPES and tok.contract:
                 if w.chain == "multiversx":
                     multiversx_identifiers.add(tok.contract)
                 else:
-                    contracts_by_chain.setdefault(w.chain, set()).add(
+                    ordered.setdefault(w.chain, {})[
                         tok.contract.lower() if w.chain == "ethereum" else tok.contract
-                    )
+                    ] = None
+    contracts_by_chain: dict[str, list[str]] = {}
+    for chain, contracts in ordered.items():
+        keys = list(contracts)
+        contracts_by_chain[chain] = keys[:MAX_CONTRACTS_PER_CHAIN]
+        _note_skipped(chain, len(keys) - MAX_CONTRACTS_PER_CHAIN)
 
     # The three groups below talk to different hosts (CoinGecko, MultiversX's
     # API, the FX service), each throttled on its own: they run side by side.
@@ -510,6 +547,10 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
         f_mvx = pool.submit(_xexchange) if multiversx_identifiers else None
         f_fx = pool.submit(_fetch_usd_eur_rate) if needs_fx else None
         native_prices, token_prices_by_chain = f_cg.result()
+        with _skipped_lock:
+            for chain, count in sorted(_SKIPPED.items()):
+                LAST_NOTES.append(
+                    f"{chain} : {count} token(s) non valorisé(s) (limite de temps ou de nombre par actualisation)")
         if f_mvx is not None:
             xexchange_prices = f_mvx.result()
         if f_fx is not None:

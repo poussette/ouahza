@@ -1,3 +1,4 @@
-v0.1.38 : Journal et fenêtre de mise à jour plus lisibles :
-- Journal des requêtes : une ligne par serveur (appels, durée, attente, nouveaux essais, erreurs), puis un total.
-- Fenêtre « Mise à jour disponible » : version, nouveautés en liste à puces dans une zone défilante, et plus aucun texte qui se superpose.
+v0.1.39 : Actualisation qui se termine toujours :
+- Un wallet Solana qui contient des milliers de tokens (airdrops) ne bloque plus l'actualisation : la recherche des prix est limitée (250 tokens par chaîne, 45 s, arrêt si le service de prix refuse deux fois de suite). Les tokens connus sont valorisés en premier.
+- Les tokens non valorisés à cause de cette limite sont signalés dans la ligne de statut.
+- Le message « Recherche des prix... » s'affiche pendant cette étape.
