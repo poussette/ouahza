@@ -212,9 +212,12 @@ jobs:
           fi
           VERSION=$(grep -E '^version *=' android/buildozer.spec | head -1 | sed 's/.*= *//' | tr -d ' \r')
           TAG="v${VERSION}"
+          # SHA-256 of every APK, published with the release: the app checks the
+          # downloaded file against it before opening the installer.
+          (cd dist && sha256sum *.apk > SHA256SUMS.txt && cat SHA256SUMS.txt)
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/*.apk --clobber
+            gh release upload "$TAG" dist/*.apk dist/SHA256SUMS.txt --clobber
           else
             if [ -f android/release_notes.txt ]; then NOTES=(--notes-file android/release_notes.txt); else NOTES=(--notes "Ouahza ${VERSION}"); fi
-            gh release create "$TAG" dist/*.apk --title "Ouahza ${VERSION}" "${NOTES[@]}" --target "$GITHUB_SHA" --latest
+            gh release create "$TAG" dist/*.apk dist/SHA256SUMS.txt --title "Ouahza ${VERSION}" "${NOTES[@]}" --target "$GITHUB_SHA" --latest
           fi

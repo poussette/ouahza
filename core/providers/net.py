@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.34"
+__version__ = "0.1.35"
 
 
 
@@ -266,7 +266,7 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http, headers=
     raise HttpError("Too many redirects")
 
 
-def request_json(
+def request_bytes(
     method: str,
     url: str,
     *,
@@ -276,10 +276,10 @@ def request_json(
     max_bytes: int = DEFAULT_MAX_BYTES,
     allow_loopback_http: bool = False,
     headers: dict | None = None,
-):
-    """Perform the request and return the decoded JSON document. Rate limits
-    (429/502/503/504), timeouts and connection errors are retried with a
-    short back-off (honouring Retry-After)."""
+) -> bytes:
+    """Perform the request and return the (size-capped) response body. Rate
+    limits (429/502/503/504), timeouts and connection errors are retried with
+    a short back-off (honouring Retry-After)."""
     if not _https_or_loopback(url, allow_loopback_http):
         raise HttpError("Refusing non-HTTPS URL")
     delays = list(RETRY_DELAYS)
@@ -311,7 +311,18 @@ def request_json(
         body = _read_capped(resp, max_bytes)
     finally:
         resp.close()
+    return body
+
+
+def request_json(method: str, url: str, **kwargs):
+    """`request_bytes` decoded as JSON (same arguments); every problem is an HttpError."""
+    body = request_bytes(method, url, **kwargs)
     try:
         return json.loads(body)
     except (ValueError, RecursionError):
         raise HttpError("Invalid JSON in API response") from None
+
+
+def request_text(method: str, url: str, **kwargs) -> str:
+    """`request_bytes` decoded as UTF-8 text (invalid bytes replaced)."""
+    return request_bytes(method, url, **kwargs).decode("utf-8", "replace")

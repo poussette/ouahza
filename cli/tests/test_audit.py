@@ -223,6 +223,199 @@ class UpdaterUrls(unittest.TestCase):
         self.assertTrue(updater.is_release_url(info["url"]))
 
 
+# ------------------------------------------- update integrity (SHA-256)
+class UpdateIntegrity(unittest.TestCase):
+    REPO = "poussette/ouahza"
+    BASE = "https://github.com/poussette/ouahza/releases/download/v9.9.9/"
+    APK = "Ouahza-9.9.9-universal.apk"
+    DATA = b"pretend apk bytes" * 1000
+
+    def digest(self, data=None):
+        import hashlib
+        return hashlib.sha256(self.DATA if data is None else data).hexdigest()
+
+    def info(self, **kw):
+        d = {"version": "9.9.9", "url": self.BASE + self.APK, "page": "https://github.com/x/y/releases/tag/v9.9.9",
+             "notes": "", "sums": self.BASE + "SHA256SUMS.txt"}
+        d.update(kw)
+        return d
+
+    def test_parse_real_sha256sum_output(self):
+        import shutil
+        import subprocess
+        if not shutil.which("sha256sum"):
+            self.skipTest("no sha256sum")
+        with tempfile.TemporaryDirectory() as d:
+            for name, data in ((self.APK, self.DATA), ("Ouahza-9.9.9-arm64.apk", b"other")):
+                Path(d, name).write_bytes(data)
+            out = subprocess.run("sha256sum *.apk", shell=True, cwd=d, capture_output=True, text=True, check=True).stdout
+        parsed = updater.parse_sha256sums(out)
+        self.assertEqual(parsed[self.APK], self.digest())
+        self.assertEqual(parsed["Ouahza-9.9.9-arm64.apk"], self.digest(b"other"))
+
+    def test_parse_ignores_junk_and_keeps_the_first_entry(self):
+        good, evil = "a" * 64, "b" * 64
+        text = f"{good}  one.apk\n{evil}  one.apk\nnot a line\n{good[:-1]}  short.apk\n{good} *star.apk\n{good}  ../x.apk\n"
+        parsed = updater.parse_sha256sums(text)
+        self.assertEqual(parsed, {"one.apk": good, "star.apk": good})
+        self.assertEqual(updater.parse_sha256sums(None), {})
+
+    def test_sha256_of_and_comparison(self):
+        import io
+        self.assertEqual(updater.sha256_of(io.BytesIO(self.DATA)), self.digest())
+        with self.assertRaises(ValueError):
+            updater.sha256_of(io.BytesIO(b"x" * 100), max_bytes=10)
+        self.assertTrue(updater.same_digest(self.digest(), self.digest().upper()))
+        for bad in (None, "", "abc", self.digest()[:-1], 5, self.digest() + "0"):
+            self.assertFalse(updater.same_digest(self.digest(), bad), repr(bad))
+        self.assertFalse(updater.same_digest(self.digest(), "0" * 64))
+
+    def test_expected_sha256_reads_the_published_listing(self):
+        listing = f"{self.digest()}  {self.APK}\n{'c' * 64}  Ouahza-9.9.9-arm64.apk\n"
+        seen = {}
+
+        def fake(method, url, **kw):
+            seen["url"], seen["max"] = url, kw.get("max_bytes")
+            return listing
+
+        with mock.patch.object(updater, "request_text", fake):
+            self.assertEqual(updater.expected_sha256(self.info()), self.digest())
+            self.assertIsNone(updater.expected_sha256(self.info(url=self.BASE + "Other-9.9.9-universal.apk")))
+        self.assertEqual(seen["url"], self.BASE + "SHA256SUMS.txt")
+        self.assertLessEqual(seen["max"], 100_000)
+
+    def test_no_listing_no_expectation_and_no_request(self):
+        with mock.patch.object(updater, "request_text", side_effect=AssertionError("must not fetch")):
+            for info in (None, {}, self.info(sums=None), self.info(sums="http://github.com/x/y/releases/download/v1/S"),
+                         self.info(sums="https://evil.example/SHA256SUMS.txt"), self.info(url="https://evil.example/a.apk"),
+                         self.info(url=self.BASE + "page")):
+                self.assertIsNone(updater.expected_sha256(info), repr(info))
+
+    def test_listing_that_cannot_be_fetched_raises_httperror(self):
+        with mock.patch.object(updater, "request_text", side_effect=net.HttpError("HTTP 404 from github.com")):
+            with self.assertRaises(net.HttpError):
+                updater.expected_sha256(self.info())
+
+    def test_check_offers_the_listing_of_the_release(self):
+        release = {"tag_name": "v9.9.9", "draft": False, "prerelease": False, "body": "n", "assets": [
+            {"name": self.APK, "browser_download_url": self.BASE + self.APK},
+            {"name": "SHA256SUMS.txt", "browser_download_url": self.BASE + "SHA256SUMS.txt"}]}
+        with mock.patch.object(updater, "request_json", return_value=release):
+            self.assertEqual(updater.check("0.1.0", self.REPO, "universal")["sums"], self.BASE + "SHA256SUMS.txt")
+        release["assets"][1]["browser_download_url"] = "https://evil.example/SHA256SUMS.txt"
+        with mock.patch.object(updater, "request_json", return_value=release):
+            self.assertIsNone(updater.check("0.1.0", self.REPO, "universal")["sums"])
+        release["assets"].pop(1)          # a release published before this feature
+        with mock.patch.object(updater, "request_json", return_value=release):
+            self.assertIsNone(updater.check("0.1.0", self.REPO, "universal")["sums"])
+
+    def test_fallback_check_points_at_the_listing_too(self):
+        def fake_get(url, **kw):
+            return FakeResp(status=302, headers={"Location": "/poussette/ouahza/releases/tag/v9.9.9"})
+
+        with mock.patch("requests.get", fake_get):
+            info = updater._check_via_redirect((0, 1, 0), self.REPO, "universal")
+        self.assertEqual(info["sums"], self.BASE + "SHA256SUMS.txt")
+        self.assertTrue(updater.is_release_url(info["sums"]))
+
+    def test_request_text_is_capped_https_only_and_decoded(self):
+        with mock.patch("requests.request", lambda *a, **k: FakeResp(body="héllo\n".encode())):
+            self.assertEqual(net.request_text("GET", "https://ok.test/"), "héllo\n")
+        with mock.patch("requests.request", lambda *a, **k: FakeResp(body=b"x" * 5000)):
+            with self.assertRaises(net.HttpError):
+                net.request_text("GET", "https://ok.test/", max_bytes=1000)
+        with self.assertRaises(net.HttpError):
+            net.request_text("GET", "http://ok.test/")
+
+    def test_workflow_publishes_the_listing_with_the_apks(self):
+        text = (HERE.parent.parent / ".github" / "workflows" / "build-apk.yml").read_text(encoding="utf-8")
+        self.assertIn("sha256sum *.apk > SHA256SUMS.txt", text)
+        self.assertEqual(text.count("dist/SHA256SUMS.txt"), 2)        # release create AND upload
+        try:
+            import yaml
+        except ImportError:
+            return
+        self.assertIn("release", yaml.safe_load(text)["jobs"])
+
+    def test_app_checks_the_download_before_opening_the_installer(self):
+        import ast
+        src = (HERE.parent.parent / "android" / "main.py").read_text(encoding="utf-8")
+        tree = ast.parse(src)
+        fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_on_download_done")
+        body = ast.get_source_segment(src, fn)
+        self.assertLess(body.index("_verify_download("), body.index("startActivity("))
+        self.assertIn('"mismatch"', body)
+        verify = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_verify_download")
+        vsrc = ast.get_source_segment(src, verify)
+        for needle in ("expected_sha256", "sha256_of", "same_digest", "detachFd"):
+            self.assertIn(needle, vsrc)
+
+
+class AppVerifyGlue(unittest.TestCase):
+    """Runs the app's real `_verify_download` (extracted from android/main.py, which
+    needs Kivy) against a fake Android activity backed by a real file descriptor."""
+
+    @classmethod
+    def setUpClass(cls):
+        import ast
+        import textwrap
+        src = (HERE.parent.parent / "android" / "main.py").read_text(encoding="utf-8")
+        fn = next(n for n in ast.walk(ast.parse(src)) if isinstance(n, ast.FunctionDef) and n.name == "_verify_download")
+        ns = {"os": os}
+        exec(textwrap.dedent(ast.get_source_segment(src, fn)), ns)
+        cls.verify = staticmethod(ns["_verify_download"])
+
+    class Pfd:
+        def __init__(self, path):
+            self.fd = os.open(path, os.O_RDONLY)
+
+        def detachFd(self):
+            fd, self.fd = self.fd, None
+            return fd
+
+    class Activity:
+        def __init__(self, path):
+            self.path = path
+
+        def getContentResolver(self):
+            outer = self
+
+            class CR:
+                def openFileDescriptor(self, uri, mode):
+                    assert mode == "r"
+                    return AppVerifyGlue.Pfd(outer.path)
+            return CR()
+
+    class Me:
+        pass
+
+    def check(self, data, info, listing):
+        with tempfile.TemporaryDirectory() as d:
+            apk = os.path.join(d, "a.apk")
+            Path(apk).write_bytes(data)
+            me = self.Me()
+            me._update_info = info
+            with mock.patch.object(updater, "request_text", return_value=listing):
+                return self.verify(me, self.Activity(apk), "content://x")
+
+    def test_ok_mismatch_and_unknown(self):
+        good = UpdateIntegrity.DATA
+        digest = UpdateIntegrity().digest()
+        info = UpdateIntegrity().info()
+        listing = f"{digest}  {UpdateIntegrity.APK}\n"
+        self.assertEqual(self.check(good, info, listing), "ok")
+        self.assertEqual(self.check(good + b"tampered", info, listing), "mismatch")
+        self.assertEqual(self.check(good, info, "no listing here\n"), "unknown")       # no entry for this APK
+        self.assertEqual(self.check(good, UpdateIntegrity().info(sums=None), listing), "unknown")
+        self.assertEqual(self.check(good, None, listing), "unknown")
+
+    def test_a_failure_to_check_never_blocks_the_update(self):
+        me = self.Me()
+        me._update_info = UpdateIntegrity().info()
+        with mock.patch.object(updater, "request_text", side_effect=net.HttpError("down")):
+            self.assertEqual(self.verify(me, self.Activity("/nonexistent"), "content://x"), "unknown")
+
+
 # ------------------------------------------------- untrusted-data robustness
 class HostileResponses(unittest.TestCase):
     def test_token_type_that_is_not_text_does_not_crash(self):

@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.34"
+__version__ = "0.1.35"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.34"
+APP_VERSION = "0.1.35"
 
 
 def _version_problems() -> list[str]:
@@ -1097,13 +1097,45 @@ class OuahzaApp(App):
             if uri is None:  # download failed
                 Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Téléchargement de la mise à jour échoué."))
                 return
+            verdict = self._verify_download(activity, uri)
+            if verdict == "mismatch":
+                # the file is not the one the release published: never hand it to the installer
+                try:
+                    activity.getSystemService(Context.DOWNLOAD_SERVICE).remove(self._dl_id)
+                except Exception:  # noqa: BLE001
+                    pass
+                Clock.schedule_once(lambda dt: self._notice(
+                    "Mise à jour refusée",
+                    "L'empreinte SHA-256 du fichier téléchargé ne correspond pas à celle publiée avec la version. "
+                    "Installation annulée et fichier supprimé. Réessaie plus tard."))
+                Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Mise à jour refusée : empreinte SHA-256 différente."))
+                return
             view = Intent(Intent.ACTION_VIEW)
             view.setDataAndType(uri, "application/vnd.android.package-archive")
             view.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK)
             activity.startActivity(view)
-            Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Installation de la mise à jour..."))
+            note = " (empreinte SHA-256 vérifiée)" if verdict == "ok" else " (empreinte SHA-256 non vérifiable)"
+            Clock.schedule_once(lambda dt: setattr(self.status_label, "text", "Installation de la mise à jour..." + note))
         except Exception:  # noqa: BLE001 - tap the download notification instead
             pass
+
+    def _verify_download(self, activity, uri) -> str:
+        """Compare the SHA-256 of the downloaded APK with the one published in the
+        release (SHA256SUMS.txt). "ok" | "mismatch" | "unknown": only a proven
+        mismatch stops the update; when the check itself cannot run (release
+        without a listing, network or file problem) Android's own signature check
+        is still the last word, and the status line says it was not verified."""
+        try:
+            from providers import updater
+            expected = updater.expected_sha256(getattr(self, "_update_info", None))
+            if not expected:
+                return "unknown"
+            pfd = activity.getContentResolver().openFileDescriptor(uri, "r")
+            with os.fdopen(pfd.detachFd(), "rb") as f:
+                actual = updater.sha256_of(f)
+            return "ok" if updater.same_digest(actual, expected) else "mismatch"
+        except Exception:  # noqa: BLE001
+            return "unknown"
 
     def _open_url(self, url: str) -> None:
         """Hand the release link to the system (browser/download manager)."""
@@ -1156,6 +1188,7 @@ class OuahzaApp(App):
             popup.dismiss()
 
         def do_go(_b):
+            self._update_info = info       # for the SHA-256 check once the download is complete
             self._gate_release(False)      # mise à jour lancée : pas d'actualisation automatique
             popup.dismiss()
             if self._download_apk(info):

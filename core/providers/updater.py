@@ -10,13 +10,15 @@ and an update over the installed app keeps its private data/settings).
 
 from __future__ import annotations
 
-__version__ = "0.1.34"
+__version__ = "0.1.35"
 
+import hashlib
+import hmac
 import re
 
 import requests
 
-from .net import HttpError, request_json
+from .net import HttpError, request_json, request_text
 from .safe import clean_text
 
 DEFAULT_REPO = "poussette/ouahza"
@@ -52,6 +54,60 @@ def is_release_url(url) -> bool:
 
 
 VARIANTS = ("universal", "arm64")
+
+#: release asset that lists the SHA-256 of every APK of the release
+#: (`sha256sum` format: "<64 hex>  <file name>").
+SUMS_NAME = "SHA256SUMS.txt"
+MAX_SUMS_BYTES = 20_000
+MAX_APK_BYTES = 400_000_000
+_SUMS_LINE_RE = re.compile(r"([0-9a-fA-F]{64}) [ *]?([A-Za-z0-9_.-]{1,120})")
+
+
+def parse_sha256sums(text) -> dict[str, str]:
+    """{file name: lowercase sha256} from a `sha256sum` listing; lines that do
+    not follow the format are ignored (never guessed at)."""
+    out: dict[str, str] = {}
+    for line in (text if isinstance(text, str) else "").splitlines()[:200]:
+        m = _SUMS_LINE_RE.fullmatch(line.strip())
+        if m:
+            out.setdefault(m.group(2), m.group(1).lower())
+    return out
+
+
+def sha256_of(fileobj, max_bytes: int = MAX_APK_BYTES) -> str:
+    """SHA-256 (hex) of a binary file object, read in chunks; ValueError past `max_bytes`."""
+    h = hashlib.sha256()
+    total = 0
+    while True:
+        chunk = fileobj.read(1 << 20)
+        if not chunk:
+            return h.hexdigest()
+        total += len(chunk)
+        if total > max_bytes:
+            raise ValueError("file too large")
+        h.update(chunk)
+
+
+def same_digest(actual, expected) -> bool:
+    """Constant-time comparison of two hex digests (False for anything else)."""
+    return (
+        isinstance(actual, str) and isinstance(expected, str)
+        and len(actual) == len(expected) == 64
+        and hmac.compare_digest(actual.lower().encode(), expected.lower().encode())
+    )
+
+
+def expected_sha256(info) -> str | None:
+    """The published SHA-256 of the APK offered in `info` (as returned by
+    check()), or None when the release publishes none for it. Raises
+    net.HttpError when the listing cannot be fetched."""
+    if not isinstance(info, dict):
+        return None
+    sums_url, apk_url = info.get("sums"), info.get("url")
+    if not is_release_url(sums_url) or not is_release_url(apk_url) or not apk_url.endswith(".apk"):
+        return None
+    text = request_text("GET", sums_url, max_bytes=MAX_SUMS_BYTES)
+    return parse_sha256sums(text).get(apk_url.rsplit("/", 1)[-1])
 
 
 def variant_from_apk_entries(names) -> str | None:
@@ -91,6 +147,16 @@ def _pick_asset(assets, repo: str, variant: str = "universal") -> str | None:
     return None
 
 
+def _pick_sums(assets, repo: str) -> str | None:
+    prefix = f"https://github.com/{repo}/releases/download/"
+    for a in assets if isinstance(assets, list) else []:
+        if isinstance(a, dict) and a.get("name") == SUMS_NAME:
+            url = a.get("browser_download_url")
+            if isinstance(url, str) and url.startswith(prefix) and is_release_url(url):
+                return url
+    return None
+
+
 def check(current: str, repo: str = DEFAULT_REPO, variant: str = "universal") -> dict | None:
     """Return {"version", "url", "page", "notes"} when a release newer than
     `current` exists, else None. Raises net.HttpError on network problems."""
@@ -120,6 +186,7 @@ def check(current: str, repo: str = DEFAULT_REPO, variant: str = "universal") ->
         "url": url,
         "page": page,
         "notes": clean_text(data.get("body") or "", 400),
+        "sums": _pick_sums(data.get("assets"), repo),
     }
 
 
@@ -156,4 +223,5 @@ def _check_via_redirect(cur: tuple[int, int, int], repo: str, variant: str) -> d
         "url": f"https://github.com/{repo}/releases/download/{tag}/Ouahza-{version}-{variant}.apk",
         "page": page,
         "notes": "",
+        "sums": f"https://github.com/{repo}/releases/download/{tag}/{SUMS_NAME}",
     }
