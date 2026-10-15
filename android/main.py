@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.36"
+__version__ = "0.1.37"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.36"
+APP_VERSION = "0.1.37"
 
 
 def _version_problems() -> list[str]:
@@ -704,11 +704,18 @@ class OuahzaApp(App):
             color=MUTED, font_size=sp(12), padding=(dp(20), 0), min_height=dp(24),
         )
         root.add_widget(self.status_label)
-        # Durées de la dernière actualisation (où part le temps) : petite ligne discrète.
-        self.perf_label = WrapLabel(
-            text="", color=rgba(FAINT_HEX), font_size=sp(10), padding=(dp(20), 0),
+        # Journal des requêtes de la dernière actualisation (où part le temps) : petit bouton
+        # discret, caché tant qu'aucune actualisation n'a eu lieu.
+        self._net_log = ""
+        logs_row = BoxLayout(size_hint=(1, None), height=dp(30), padding=(dp(20), dp(4), dp(20), dp(2)))
+        self.logs_btn = RoundedButton(
+            text="Logs", bg=SURFACE2, fg=rgba(FAINT_HEX), font_size=sp(11), bold=False, radius=dp(10),
+            size_hint=(None, 1), width=dp(64), opacity=0, disabled=True,
         )
-        root.add_widget(self.perf_label)
+        self.logs_btn.bind(on_release=self.open_logs)
+        logs_row.add_widget(self.logs_btn)
+        logs_row.add_widget(Widget())
+        root.add_widget(logs_row)
 
         # Barre figée : en-tête du wallet ouvert quand le sien a défilé hors écran.
         # Superposée à la liste (FloatLayout) : n'en change pas la taille, donc aucun saut.
@@ -1490,6 +1497,32 @@ class OuahzaApp(App):
         close.bind(on_release=lambda _b: popup.dismiss())
         popup.open()
 
+    def open_logs(self, _instance):
+        """Popup : durées et requêtes réseau de la dernière actualisation, par hôte."""
+        if not self._net_log:
+            return
+        box = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
+        popup = self._popup("Journal des requêtes", box, size_hint=(0.94, 0.8))
+        label = WrapLabel(text=self._net_log, font_size=sp(12), color=TEXT)
+        scroll = ScrollView(do_scroll_x=False, bar_width=dp(3), size_hint=(1, 1))
+        scroll.add_widget(label)
+        box.add_widget(scroll)
+        row = BoxLayout(size_hint=(1, None), height=dp(48), spacing=dp(10))
+        copy = RoundedButton(text="Copier", bg=SURFACE2)
+        close = RoundedButton(text="Fermer", bg=ACCENT, fg=BG)
+
+        def do_copy(_b):
+            Clipboard.copy(self._net_log)
+            self.status_label.text = "Journal des requêtes copié dans le presse-papier."
+            popup.dismiss()
+
+        copy.bind(on_release=do_copy)
+        close.bind(on_release=lambda _b: popup.dismiss())
+        row.add_widget(copy)
+        row.add_widget(close)
+        box.add_widget(row)
+        popup.open()
+
     def open_export(self, _instance):
         if not self.last_results:
             return
@@ -1618,13 +1651,12 @@ class OuahzaApp(App):
                 timings = dict(_pricing.LAST_TIMINGS)
             except Exception:
                 priced_ok = False  # offline / pricing down: keep raw balances
-            perf = (
+            elapsed = time.monotonic() - t0
+            log = (
                 f"Durées : wallets {t_wallets:.0f} s · prix {timings.get('prix', 0):.0f} s"
-                f" · LP {timings.get('lp', 0):.0f} s · total {time.monotonic() - t0:.0f} s"
+                f" · LP {timings.get('lp', 0):.0f} s · total {elapsed:.0f} s\n\n"
+                + _net.stats_report()
             )
-            stats = _net.stats_summary()
-            if stats:
-                perf += "\n" + stats
 
             # Les positions sans valeur / < 1 centime sont masquées à l'affichage
             # (avec bouton pour les voir) ; l'export texte suit le même défaut.
@@ -1637,7 +1669,7 @@ class OuahzaApp(App):
                 report.filter_dust(text_results)
             text = report.format_table(text_results)
             self._save_last_report(results, priced_ok)
-            Clock.schedule_once(lambda dt: self._finish(results, text, None, priced_ok, notes, perf=perf))
+            Clock.schedule_once(lambda dt: self._finish(results, text, None, priced_ok, notes, elapsed=elapsed, log=log))
         except Exception as exc:
             # Never show a raw traceback: it can embed URLs with API keys.
             err = safe_error(exc) or exc.__class__.__name__
@@ -1672,7 +1704,7 @@ class OuahzaApp(App):
             return
         self.on_run(None)
 
-    def _finish(self, results, text, error, priced_ok, notes=(), stamp=None, from_disk=False, perf=""):
+    def _finish(self, results, text, error, priced_ok, notes=(), stamp=None, from_disk=False, elapsed=None, log=""):
         self.running = False
         self._busy_stop()
         if not from_disk:
@@ -1695,10 +1727,14 @@ class OuahzaApp(App):
                 text=f"[color={RED_HEX}]{esc(safe_error(exc))}[/color]", markup=True, font_size=sp(11),
             ))
         when = time.strftime('%d/%m/%Y à %H:%M', time.localtime(stamp)) if stamp else time.strftime('%d/%m/%Y à %H:%M')
-        msg = f"Mis à jour le {when} · {len(results)} wallet(s)"
+        took = f" ({elapsed:.0f} s)" if elapsed is not None and not from_disk else ""
+        msg = f"Mis à jour le {when}{took} · {len(results)} wallet(s)"
         if from_disk:
             msg += " · dernières données enregistrées, appuie sur Actualiser"
-        self.perf_label.text = perf if not from_disk else self.perf_label.text
+        if log and not from_disk:
+            self._net_log = log
+        self.logs_btn.opacity = 1 if self._net_log else 0
+        self.logs_btn.disabled = not self._net_log
         if not priced_ok:
             msg += " · prix indisponibles, soldes bruts affichés"
         for note in notes:

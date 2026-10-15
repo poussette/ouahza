@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.36"
+__version__ = "0.1.37"
 
 
 
@@ -163,15 +163,35 @@ STATS: dict[str, dict[str, float]] = {}
 _stats_lock = threading.Lock()
 
 
+#: host -> {error label -> count}; labels are fixed short words ("HTTP 429", "Timeout"),
+#: never the server's text or a URL.
+ERRORS: dict[str, dict[str, int]] = {}
+
+
 def reset_stats() -> None:
     with _stats_lock:
         STATS.clear()
+        ERRORS.clear()
 
 
 def _count(host: str, field: str, amount: float = 1) -> None:
     with _stats_lock:
         row = STATS.setdefault(host or "?", {"calls": 0, "wait": 0.0, "r429": 0})
         row[field] = row.get(field, 0) + amount
+
+
+def _note_error(host: str, label: str) -> None:
+    with _stats_lock:
+        row = ERRORS.setdefault(host or "?", {})
+        if label in row or len(row) < 12:
+            row[label] = row.get(label, 0) + 1
+
+
+def _host_of(url: str) -> str:
+    try:
+        return urlsplit(url).hostname or ""
+    except ValueError:
+        return ""
 
 
 #: host names shown differently in the statistics line.
@@ -191,6 +211,41 @@ def stats_summary(max_hosts: int = 4) -> str:
                 extra.append(f"{int(row['r429'])}×429")
             parts.append(f"{HOST_LABELS.get(host, host)} {int(row['calls'])} appel(s)" + (f" ({', '.join(extra)})" if extra else ""))
     return " · ".join(parts)
+
+
+def stats_report() -> str:
+    """Per-host log of the last refresh, for the app's "Logs" popup: number of
+    requests, cumulated network seconds, throttle wait, retries and errors
+    (every host, most used first). Requests run in parallel, so the cumulated
+    seconds can exceed the wall-clock time."""
+    with _stats_lock:
+        rows = sorted(STATS.items(), key=lambda kv: -kv[1]["calls"])
+        errors = {h: dict(e) for h, e in ERRORS.items()}
+        total_calls = sum(int(r["calls"]) for _, r in rows)
+        total_time = sum(r.get("time", 0.0) for _, r in rows)
+        total_err = sum(sum(e.values()) for e in errors.values())
+        total_retry = sum(int(r.get("retry", 0)) for _, r in rows)
+        blocks = []
+        for host, row in rows:
+            lines = [HOST_LABELS.get(host, host),
+                     f"  {int(row['calls'])} appel(s) · {row.get('time', 0.0):.1f} s"]
+            extra = []
+            if row["wait"] >= 0.5:
+                extra.append(f"attente {row['wait']:.0f} s")
+            if row.get("retry"):
+                extra.append(f"{int(row['retry'])} nouvel(les) essai(s) (pause {row.get('retry_wait', 0.0):.0f} s)")
+            if extra:
+                lines.append("  " + " · ".join(extra))
+            if errors.get(host):
+                lines.append("  erreurs : " + ", ".join(
+                    f"{n}× {label}" for label, n in sorted(errors[host].items(), key=lambda kv: -kv[1])))
+            blocks.append("\n".join(lines))
+    if not blocks:
+        return "Aucune requête."
+    head = f"{total_calls} appel(s) · {total_time:.0f} s cumulées (en parallèle)\n"
+    head += f"{total_retry} nouvel(les) essai(s) · " if total_retry else ""
+    head += f"{total_err} erreur(s)" if total_err else "aucune erreur"
+    return head + "\n\n" + "\n\n".join(blocks)
 
 
 def _throttle(url: str) -> None:
@@ -226,15 +281,21 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http, headers=
     in clear text."""
     for _hop in range(MAX_REDIRECTS + 1):
         _throttle(url)
+        started = time.monotonic()
         try:
             resp = requests.request(
                 method, url, params=params, json=json_body, timeout=timeout,
                 stream=True, allow_redirects=False, headers=headers,
             )
         except requests.RequestException as exc:
-            _count(urlsplit(url).hostname or "", "calls")
+            _count(_host_of(url), "calls")
+            _count(_host_of(url), "time", time.monotonic() - started)
+            _note_error(_host_of(url), type(exc).__name__)
             raise HttpError(redact(str(exc))) from None
         _count(urlsplit(url).hostname or "", "calls")
+        _count(_host_of(url), "time", time.monotonic() - started)
+        if resp.status_code >= 400:
+            _note_error(_host_of(url), f"HTTP {resp.status_code}")
         if resp.status_code == 429:
             _count(urlsplit(url).hostname or "", "r429")
             _note_429(urlsplit(url).hostname or "")
@@ -302,13 +363,19 @@ def request_bytes(
                 resp.close()
             else:
                 break
+        _count(_host_of(url), "retry")
+        _count(_host_of(url), "retry_wait", wait)
         _sleep(wait)
     try:
         try:
             resp.raise_for_status()
         except requests.HTTPError:
             raise HttpError(_short_http_error(resp)) from None
-        body = _read_capped(resp, max_bytes)
+        read_started = time.monotonic()
+        try:
+            body = _read_capped(resp, max_bytes)
+        finally:
+            _count(_host_of(url), "time", time.monotonic() - read_started)
     finally:
         resp.close()
     return body

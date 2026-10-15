@@ -1,4 +1,4 @@
-v0.1.36 : Noms des tokens Solana et appels réseau :
-- Les noms des tokens Solana (USDC, USDT…) s'affichent de nouveau : l'ancienne liste Jupiter n'existait plus, la recherche se fait maintenant par adresse de token sur la nouvelle API.
-- Une seule recherche pour tous les wallets Solana au lieu de 12 tentatives ; en cas d'échec, l'adresse raccourcie reste affichée et on ne réessaie pas pendant une minute.
-- Les totaux ne changent pas.
+v0.1.37 : Journal des requêtes :
+- Le bouton « Logs » (sous la ligne de statut) ouvre le détail de la dernière actualisation : pour chaque serveur, le nombre d'appels, le temps passé, l'attente imposée par la cadence, les nouveaux essais et les erreurs. Un bouton « Copier » permet de l'envoyer.
+- La durée totale de l'actualisation s'affiche maintenant juste après la date et l'heure (« Mis à jour le … (27 s) »).
+- Tous les serveurs sont listés (avant, seuls les 4 plus sollicités apparaissaient).
