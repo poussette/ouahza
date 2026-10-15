@@ -453,7 +453,7 @@ class HostileResponses(unittest.TestCase):
                     {"account": {"data": {"parsed": {"info": {"mint": good, "tokenAmount": {"uiAmountString": "2"}}}}}}]}}
             return {"result": []}
 
-        solana._token_list_cache = {}
+        solana._token_meta_cache.clear()
         with mock.patch.object(solana, "request_json", side_effect=rpc):
             w = solana.SolanaProvider().get_balance("A" * 44)
         self.assertEqual([t.amount for t in w.tokens], [2.0])
@@ -478,7 +478,7 @@ class HostileResponses(unittest.TestCase):
                     "meta": ["not a dict"], "stake": {"delegation": {"voter": "V", "activationEpoch": "1"}}}}}}}]}
             return {"result": {"epoch": 100}}
 
-        solana._token_list_cache = {}
+        solana._token_meta_cache.clear()
         with mock.patch.object(solana, "request_json", side_effect=rpc):
             w = solana.SolanaProvider().get_balance("A" * 44)
         self.assertIsNone(w.error)

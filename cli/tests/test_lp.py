@@ -45,6 +45,23 @@ def blob(*ids):
     return b"".join(len(i).to_bytes(4, "big") + i.encode() for i in ids)
 
 
+
+_CLEARED = ("MULTIVERSX_GATEWAY_URL", "MULTIVERSX_GATEWAY_KEY", "WALLET_DATA_API_TOKEN")
+
+
+def setUpModule():
+    """The developer's own exported settings must not change what these tests see."""
+    global _env
+    _env = mock.patch.dict(os.environ)
+    _env.start()
+    for name in _CLEARED:
+        os.environ.pop(name, None)
+
+
+def tearDownModule():
+    _env.stop()
+
+
 class Chain:
     """Tiny fake MultiversX API + gateway. `views` answers for every contract."""
 

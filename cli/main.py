@@ -66,7 +66,7 @@ Optional environment variables:
 
 from __future__ import annotations
 
-__version__ = "0.1.35"
+__version__ = "0.1.36"
 
 
 

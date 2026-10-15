@@ -49,7 +49,7 @@ are already picked up by the normal token scan above.)
 
 from __future__ import annotations
 
-__version__ = "0.1.35"
+__version__ = "0.1.36"
 
 
 
@@ -58,6 +58,8 @@ __version__ = "0.1.35"
 
 import os
 import re
+import threading
+import time
 
 import requests
 
@@ -73,7 +75,13 @@ def _public_rpc() -> str:
     # change SOLANA_RPC_URL at runtime, after this module has already been
     # imported, and have it take effect on the next lookup.
     return validate_rpc_url(os.environ.get("SOLANA_RPC_URL")) or _DEFAULT_SOLANA_RPC
-JUPITER_TOKEN_LIST = "https://token.jup.ag/all"
+# Token metadata (symbol, name) comes from Jupiter's search API, which answers
+# for several mints in one request. The old whole-list endpoint
+# (token.jup.ag/all, ~30 MB) no longer exists.
+JUPITER_TOKEN_SEARCH = "https://lite-api.jup.ag/tokens/v2/search"
+_META_CHUNK = 50          # mints per request
+_META_MAX_MINTS = 200     # per wallet; airdrop-spam beyond that keeps its short form
+_META_RETRY_AFTER = 60.0  # seconds without retrying after a failed lookup
 SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 STAKE_PROGRAM_ID = "Stake11111111111111111111111111111111111111"
 # Stake account layout: 4-byte enum tag + 8-byte rent_exempt_reserve, then
@@ -94,23 +102,42 @@ _DUST_THRESHOLD_LAMPORTS = 5_000_000  # 0.005 SOL, comfortably above rent reserv
 # base58-encoded 32-byte values, so length varies with leading zero bytes.
 _SOL_RE = re.compile(r"[1-9A-HJ-NP-Za-km-z]{32,44}")   # fullmatch only
 
-_token_list_cache: dict[str, dict] | None = None
+# mint -> Jupiter's record (an empty dict = asked, not known). Shared by every
+# wallet of a run; the lock makes wallets read in parallel share one lookup
+# instead of each repeating it.
+_token_meta_cache: dict[str, dict] = {}
+_token_meta_lock = threading.Lock()
+_token_meta_failed_at: float | None = None
 
 
-def _load_token_list() -> dict[str, dict]:
-    global _token_list_cache
-    if _token_list_cache is not None:
-        return _token_list_cache
-    try:
-        tokens = request_json("GET", JUPITER_TOKEN_LIST, max_bytes=30_000_000)
-        _token_list_cache = {
-            t["address"]: t
-            for t in tokens
-            if isinstance(t, dict) and isinstance(t.get("address"), str)
-        }
-    except (requests.RequestException, ValueError, KeyError, TypeError):
-        _token_list_cache = {}
-    return _token_list_cache
+def _lookup_token_meta(mints: list[str]) -> dict[str, dict]:
+    """Symbol/name for `mints` (already validated base58). Best effort: if Jupiter
+    cannot be reached the tokens simply keep their shortened address, and no new
+    attempt is made for a minute."""
+    global _token_meta_failed_at
+    with _token_meta_lock:
+        missing = [m for m in dict.fromkeys(mints) if m not in _token_meta_cache]
+        missing = missing[:_META_MAX_MINTS]
+        if missing and _token_meta_failed_at is not None \
+                and time.monotonic() - _token_meta_failed_at < _META_RETRY_AFTER:
+            missing = []
+        for i in range(0, len(missing), _META_CHUNK):
+            chunk = missing[i:i + _META_CHUNK]
+            try:
+                found = request_json("GET", f"{JUPITER_TOKEN_SEARCH}?query={','.join(chunk)}",
+                                     max_bytes=5_000_000)
+                if not isinstance(found, list):
+                    raise ValueError("unexpected answer")
+            except (requests.RequestException, ValueError, TypeError):
+                _token_meta_failed_at = time.monotonic()
+                break
+            wanted = set(chunk)
+            for t in found:
+                if isinstance(t, dict) and t.get("id") in wanted:
+                    _token_meta_cache[t["id"]] = t
+            for m in chunk:
+                _token_meta_cache.setdefault(m, {})
+        return {m: _token_meta_cache.get(m, {}) for m in mints}
 
 
 class SolanaProvider(BaseProvider):
@@ -176,13 +203,13 @@ class SolanaProvider(BaseProvider):
             wallet.warning = f"Could not fetch SPL tokens: {safe_error(token_accounts['error'])}"
             return wallet
 
-        token_list = _load_token_list()
         accounts_result = token_accounts.get("result")
         value_list = accounts_result.get("value", []) if isinstance(accounts_result, dict) else []
         if not isinstance(value_list, list):
             value_list = []
         if len(value_list) > 2000:
             wallet.warning = "token list truncated at 2000 accounts"
+        held: list[tuple[str, float]] = []
         for entry in value_list[:2000]:
             try:
                 info = entry["account"]["data"]["parsed"]["info"]
@@ -195,7 +222,10 @@ class SolanaProvider(BaseProvider):
                 continue
             if not amount:
                 continue
-            meta = token_list.get(mint, {})
+            held.append((mint, amount))
+        metas = _lookup_token_meta([m for m, _ in held]) if held else {}
+        for mint, amount in held:
+            meta = metas.get(mint) or {}
             wallet.tokens.append(
                 TokenBalance(
                     symbol=clean_text(meta.get("symbol"), 40) or (mint[:6] + "…"),

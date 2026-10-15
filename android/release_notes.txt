@@ -1,4 +1,4 @@
-v0.1.35: Vérification de l'APK avant l'installation :
-- Chaque version publie désormais SHA256SUMS.txt (empreintes SHA-256 des APK) ; l'app compare le fichier téléchargé à cette empreinte avant d'ouvrir l'installeur et refuse (et supprime) un fichier différent.
-- Si l'empreinte n'est pas disponible (ancienne version, réseau), la mise à jour continue et l'écran l'indique : Android vérifie de toute façon la signature.
-- Inclut les durcissements de la 0.1.34 (redirections, liens de mise à jour, données hostiles, écritures privées).
+v0.1.36 : Noms des tokens Solana et appels réseau :
+- Les noms des tokens Solana (USDC, USDT…) s'affichent de nouveau : l'ancienne liste Jupiter n'existait plus, la recherche se fait maintenant par adresse de token sur la nouvelle API.
+- Une seule recherche pour tous les wallets Solana au lieu de 12 tentatives ; en cas d'échec, l'adresse raccourcie reste affichée et on ne réessaie pas pendant une minute.
+- Les totaux ne changent pas.
