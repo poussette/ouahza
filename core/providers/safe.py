@@ -12,7 +12,7 @@ UI markup, or (d) poison totals with NaN/inf/absurd numbers.
 
 from __future__ import annotations
 
-__version__ = "0.1.37"
+__version__ = "0.1.38"
 
 
 
@@ -47,6 +47,25 @@ _DROPPED_CATEGORIES = {"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"}
 
 
 # --------------------------------------------------------------------- text
+
+def clean_lines(value, max_len: int = 800, max_lines: int = 12, line_len: int = 200) -> str:
+    """Like `clean_text` but keeps the line breaks: every line is cleaned on its
+    own (no control or invisible characters), empty lines are dropped, and both
+    the number and the length of the lines are bounded."""
+    if value is None:
+        return ""
+    lines = []
+    for raw in str(value)[: max_len * 4].replace("\r", "\n").split("\n"):
+        line = clean_text(raw, line_len)
+        if line:
+            lines.append(line)
+        if len(lines) >= max_lines:
+            break
+    out = "\n".join(lines)
+    if len(out) > max_len:
+        out = out[: max_len - 1] + "…"
+    return out
+
 
 def clean_text(value, max_len: int = MAX_TEXT) -> str:
     """Return `value` as printable single-line text.

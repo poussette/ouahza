@@ -84,7 +84,7 @@ class TestUpdater(unittest.TestCase):
         self.assertEqual(info["version"], "0.9.8")
         self.assertTrue(info["url"].endswith("universal.apk"))
         self.assertIn("/releases/tag/v0.9.8", info["page"])
-        self.assertNotIn("\n", info["notes"])
+        self.assertTrue(all(ch == "\n" or ch.isprintable() for ch in info["notes"]))
         self.assertEqual(m.call_args[0][1], f"https://api.github.com/repos/{REPO}/releases/latest")
 
     def test_variant_follows_the_installed_build(self):
@@ -139,6 +139,31 @@ class TestUpdater(unittest.TestCase):
         with mock.patch.object(updater, "request_json") as m:
             self.assertIsNone(updater.check("dev", REPO))
             m.assert_not_called()
+
+
+class TestNotes(unittest.TestCase):
+    def test_lines_are_kept_but_cleaned(self):
+        body = "v1.2.3 : Titre :\r\n- un\x1b[31m rouge\n\n- deux\u202e\n" + "x" * 500
+        info, _ = run(release(body=body))
+        lines = info["notes"].split("\n")
+        self.assertEqual(lines[:3], ["v1.2.3 : Titre :", "- un[31m rouge", "- deux"])
+        self.assertTrue(all(len(ln) <= 200 for ln in lines))
+        self.assertNotIn("\x1b", info["notes"])
+        self.assertNotIn("\u202e", info["notes"])
+
+    def test_number_of_lines_and_size_are_bounded(self):
+        info, _ = run(release(body="\n".join(f"- ligne {i}" for i in range(100))))
+        self.assertLessEqual(len(info["notes"].split("\n")), 12)
+        self.assertLessEqual(len(info["notes"]), 800)
+
+    def test_split_notes(self):
+        title, items = updater.split_notes("v0.1.37 : Journal des requêtes :\n- Un bouton.\n• Deux.\n* Trois.")
+        self.assertEqual(title, "Journal des requêtes")
+        self.assertEqual(items, ["Un bouton.", "Deux.", "Trois."])
+        self.assertEqual(updater.split_notes("- seulement\n- des puces"), ("", ["seulement", "des puces"]))
+        self.assertEqual(updater.split_notes("Texte libre sans puces"), ("Texte libre sans puces", []))
+        self.assertEqual(updater.split_notes(""), ("", []))
+        self.assertEqual(updater.split_notes(None), ("", []))
 
 
 if __name__ == "__main__":

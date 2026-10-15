@@ -10,7 +10,7 @@ and an update over the installed app keeps its private data/settings).
 
 from __future__ import annotations
 
-__version__ = "0.1.37"
+__version__ = "0.1.38"
 
 import hashlib
 import hmac
@@ -19,7 +19,7 @@ import re
 import requests
 
 from .net import HttpError, request_json, request_text
-from .safe import clean_text
+from .safe import clean_lines, clean_text
 
 DEFAULT_REPO = "poussette/ouahza"
 
@@ -185,9 +185,24 @@ def check(current: str, repo: str = DEFAULT_REPO, variant: str = "universal") ->
         "version": ".".join(map(str, latest)),
         "url": url,
         "page": page,
-        "notes": clean_text(data.get("body") or "", 400),
+        "notes": clean_lines(data.get("body") or ""),
         "sums": _pick_sums(data.get("assets"), repo),
     }
+
+
+_NOTES_PREFIX = re.compile(r"^v?\d+\.\d+\.\d+\s*[:\-\u2013]\s*")
+_BULLET = re.compile(r"^[-*\u2022]\s+")
+
+
+def split_notes(notes: str) -> tuple[str, list[str]]:
+    """Release notes -> (title, bullet items) for display. The first line is the
+    title ("v0.1.37 : Journal des requêtes :" -> "Journal des requêtes") unless it
+    is itself a bullet; the other lines lose their leading "- "."""
+    lines = [ln.strip() for ln in str(notes or "").split("\n") if ln.strip()]
+    title = ""
+    if lines and not _BULLET.match(lines[0]):
+        title = _NOTES_PREFIX.sub("", lines.pop(0)).rstrip(" :").strip()
+    return title, [_BULLET.sub("", ln) for ln in lines]
 
 
 def _check_via_redirect(cur: tuple[int, int, int], repo: str, variant: str) -> dict | None:

@@ -1,4 +1,3 @@
-v0.1.37 : Journal des requêtes :
-- Le bouton « Logs » (sous la ligne de statut) ouvre le détail de la dernière actualisation : pour chaque serveur, le nombre d'appels, le temps passé, l'attente imposée par la cadence, les nouveaux essais et les erreurs. Un bouton « Copier » permet de l'envoyer.
-- La durée totale de l'actualisation s'affiche maintenant juste après la date et l'heure (« Mis à jour le … (27 s) »).
-- Tous les serveurs sont listés (avant, seuls les 4 plus sollicités apparaissaient).
+v0.1.38 : Journal et fenêtre de mise à jour plus lisibles :
+- Journal des requêtes : une ligne par serveur (appels, durée, attente, nouveaux essais, erreurs), puis un total.
+- Fenêtre « Mise à jour disponible » : version, nouveautés en liste à puces dans une zone défilante, et plus aucun texte qui se superpose.

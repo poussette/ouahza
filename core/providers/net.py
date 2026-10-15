@@ -15,7 +15,7 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.37"
+__version__ = "0.1.38"
 
 
 
@@ -216,36 +216,30 @@ def stats_summary(max_hosts: int = 4) -> str:
 def stats_report() -> str:
     """Per-host log of the last refresh, for the app's "Logs" popup: number of
     requests, cumulated network seconds, throttle wait, retries and errors
-    (every host, most used first). Requests run in parallel, so the cumulated
-    seconds can exceed the wall-clock time."""
+    (every host, most used first), one line per host. Requests run in parallel,
+    so the cumulated seconds can exceed the wall-clock time."""
     with _stats_lock:
         rows = sorted(STATS.items(), key=lambda kv: -kv[1]["calls"])
         errors = {h: dict(e) for h, e in ERRORS.items()}
         total_calls = sum(int(r["calls"]) for _, r in rows)
         total_time = sum(r.get("time", 0.0) for _, r in rows)
         total_err = sum(sum(e.values()) for e in errors.values())
-        total_retry = sum(int(r.get("retry", 0)) for _, r in rows)
         blocks = []
         for host, row in rows:
-            lines = [HOST_LABELS.get(host, host),
-                     f"  {int(row['calls'])} appel(s) · {row.get('time', 0.0):.1f} s"]
-            extra = []
+            parts = [HOST_LABELS.get(host, host), f"{int(row['calls'])} appel(s)", f"{row.get('time', 0.0):.1f} s"]
             if row["wait"] >= 0.5:
-                extra.append(f"attente {row['wait']:.0f} s")
+                parts.append(f"attente {row['wait']:.0f} s")
             if row.get("retry"):
-                extra.append(f"{int(row['retry'])} nouvel(les) essai(s) (pause {row.get('retry_wait', 0.0):.0f} s)")
-            if extra:
-                lines.append("  " + " · ".join(extra))
+                parts.append(f"+{int(row['retry'])} essai(s) (pause {row.get('retry_wait', 0.0):.0f} s)")
             if errors.get(host):
-                lines.append("  erreurs : " + ", ".join(
+                parts.append("erreurs " + ", ".join(
                     f"{n}× {label}" for label, n in sorted(errors[host].items(), key=lambda kv: -kv[1])))
-            blocks.append("\n".join(lines))
+            blocks.append(" · ".join(parts))
     if not blocks:
         return "Aucune requête."
-    head = f"{total_calls} appel(s) · {total_time:.0f} s cumulées (en parallèle)\n"
-    head += f"{total_retry} nouvel(les) essai(s) · " if total_retry else ""
-    head += f"{total_err} erreur(s)" if total_err else "aucune erreur"
-    return head + "\n\n" + "\n\n".join(blocks)
+    head = f"Total : {total_calls} appel(s) · {total_time:.0f} s cumulées"
+    head += f" · {total_err} erreur(s)" if total_err else " · aucune erreur"
+    return head + "\n" + "\n".join(blocks)
 
 
 def _throttle(url: str) -> None:

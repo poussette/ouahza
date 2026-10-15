@@ -33,7 +33,7 @@ class NetLogTests(unittest.TestCase):
             self.assertIn(host, out)          # more than the 4 hosts of the one-line summary
         self.assertIn("6 appel(s)", out)
         self.assertIn("aucune erreur", out)
-        self.assertIn("2 appel(s) ·", out)    # e.test, listed first
+        self.assertIn("e.test · 2 appel(s) ·", out)    # e.test, listed first
         self.assertLess(out.index("e.test"), out.index("a.test"))
         self.assertGreaterEqual(net.STATS["a.test"]["time"], 0.0)
 
@@ -45,7 +45,7 @@ class NetLogTests(unittest.TestCase):
             net.request_json("GET", "https://r.test/")
         out = net.stats_report()
         self.assertIn("3 appel(s)", out)
-        self.assertIn("2 nouvel(les) essai(s) (pause 5 s)", out)
+        self.assertIn("+2 essai(s) (pause 5 s)", out)
         self.assertIn("1× HTTP 429", out)
         self.assertIn("1× HTTP 503", out)
         self.assertIn("2 erreur(s)", out)
@@ -64,6 +64,21 @@ class NetLogTests(unittest.TestCase):
         self.assertIn("1× ConnectionError", out)
         self.assertIn("1× HTTP 404", out)
         self.assertNotIn("KEY123", out)       # only fixed labels, never the server's/URL's text
+
+    def test_one_line_per_host_with_everything_on_it(self):
+        seq = iter([FakeResp({}, status=429), FakeResp({"ok": 1})])
+        with mock.patch("requests.request", lambda *a, **k: next(seq)), \
+                mock.patch.object(net, "_sleep", lambda s: None), \
+                mock.patch.object(net, "RETRY_DELAYS", (2.0,)):
+            net.request_json("GET", "https://r.test/")
+        net.STATS["r.test"]["wait"] = 6.0
+        lines = net.stats_report().split("\n")
+        self.assertEqual(len(lines), 2)                       # total line + the single host line
+        self.assertTrue(lines[0].startswith("Total : 2 appel(s)"))
+        host_line = lines[1]
+        self.assertTrue(host_line.startswith("r.test · 2 appel(s) · "))
+        for part in ("attente 6 s", "+1 essai(s) (pause 2 s)", "erreurs 1× HTTP 429"):
+            self.assertIn(part, host_line)
 
     def test_throttle_wait_shown_and_reset_clears_everything(self):
         net.STATS["w.test"] = {"calls": 3, "wait": 12.4, "r429": 0, "time": 1.0}

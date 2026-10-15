@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.37"
+__version__ = "0.1.38"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.37"
+APP_VERSION = "0.1.38"
 
 
 def _version_problems() -> list[str]:
@@ -1163,15 +1163,28 @@ class OuahzaApp(App):
         webbrowser.open(url)
 
     def _offer_update(self, info, gate=False):
-        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
-        notes = info.get("notes") or ""
-        text = (
-            f"[b]Version {esc(info['version'])}[/b] disponible (installée : {esc(APP_VERSION)}, variante {esc(detect_variant())}).\n\n"
-            + (f"{esc(notes)}\n\n" if notes else "")
-            + f"[color={MUTED_HEX}]Tes paramètres sont conservés : Android installe la mise à jour "
-            "par-dessus l'app actuelle (ne la désinstalle pas).[/color]"
-        )
-        box.add_widget(WrapLabel(text=text, markup=True, font_size=sp(13)))
+        from providers.updater import split_notes
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(8))
+        box.add_widget(WrapLabel(
+            text=(f"[b]Version {esc(info['version'])}[/b] disponible\n"
+                  f"[color={MUTED_HEX}]Installée : {esc(APP_VERSION)} · variante {esc(detect_variant())}[/color]"),
+            markup=True, font_size=sp(14),
+        ))
+        title, items = split_notes(info.get("notes") or "")
+        if title or items:
+            parts = [f"[b]{esc(title)}[/b]"] if title else []
+            parts += [f"•  {esc(item)}" for item in items]
+            # Les nouveautés défilent dans leur propre zone : jamais de texte qui déborde sur le reste.
+            scroll = ScrollView(do_scroll_x=False, bar_width=dp(3), size_hint=(1, 1))
+            scroll.add_widget(WrapLabel(text="\n\n".join(parts), markup=True, font_size=sp(13)))
+            box.add_widget(scroll)
+        else:
+            box.add_widget(Widget())
+        box.add_widget(WrapLabel(
+            text=f"[color={MUTED_HEX}]Tes paramètres sont conservés : Android installe la mise à jour "
+                 "par-dessus l'app actuelle (ne la désinstalle pas).[/color]",
+            markup=True, font_size=sp(12),
+        ))
         row = BoxLayout(size_hint=(1, None), height=dp(48), spacing=dp(8))
         later = RoundedButton(text="Plus tard", bg=SURFACE2, font_size=sp(13))
         skip = RoundedButton(text="Ignorer", bg=SURFACE2, font_size=sp(13))
@@ -1179,7 +1192,7 @@ class OuahzaApp(App):
         for b in (later, skip, go):
             row.add_widget(b)
         box.add_widget(row)
-        popup = self._popup("Mise à jour disponible", box, size_hint=(0.92, None), height=dp(300))
+        popup = self._popup("Mise à jour disponible", box, size_hint=(0.92, 0.7))
 
         if gate and getattr(self, "_gate_timer", None) is not None:
             self._gate_timer.cancel()      # la réponse est arrivée : plus de délai, la fenêtre décide
@@ -1503,7 +1516,7 @@ class OuahzaApp(App):
             return
         box = BoxLayout(orientation="vertical", padding=dp(10), spacing=dp(8))
         popup = self._popup("Journal des requêtes", box, size_hint=(0.94, 0.8))
-        label = WrapLabel(text=self._net_log, font_size=sp(12), color=TEXT)
+        label = WrapLabel(text=self._net_log, font_size=sp(10.5), color=TEXT)
         scroll = ScrollView(do_scroll_x=False, bar_width=dp(3), size_hint=(1, 1))
         scroll.add_widget(label)
         box.add_widget(scroll)
