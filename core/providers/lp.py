@@ -29,7 +29,7 @@ ADAPTERS below. See README, section "LP tokens".
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -51,7 +51,7 @@ from urllib.parse import quote
 import requests
 
 from .net import HttpError, request_json
-from .safe import MAX_POSITION_USD, safe_decimals, validate_rpc_url
+from .safe import MAX_POSITION_USD, safe_decimals, validate_rpc_url, write_private
 
 DEFAULT_GATEWAY = "https://gateway.multiversx.com"
 MVX_API = "https://api.multiversx.com"
@@ -641,7 +641,7 @@ class LPCache:
                 len(self.pools) < MAX_CACHE_ENTRIES and isinstance(lp, str)
                 and _TOKEN_ID_RE.fullmatch(lp) and isinstance(e, dict)
                 and isinstance(e.get("sc"), str) and _ADDR_RE.fullmatch(e["sc"])
-                and e.get("spec") in names
+                and isinstance(e.get("spec"), str) and e["spec"] in names
             ):
                 entry = {"sc": e["sc"], "spec": e["spec"]}
                 toks = e.get("tokens")
@@ -653,7 +653,7 @@ class LPCache:
                 self.pools[lp] = entry
         trusted = doc.get("trusted")
         for h, spec in (trusted.items() if isinstance(trusted, dict) else ()):
-            if len(self.trusted) < 200 and _HASH_RE.fullmatch(str(h)) and spec in names:
+            if len(self.trusted) < 200 and _HASH_RE.fullmatch(str(h)) and isinstance(spec, str) and spec in names:
                 self.trusted[h] = spec
         now_w = time.time()
         hashes = doc.get("codehashes")
@@ -769,12 +769,7 @@ class LPCache:
                            "fail": self.fail, "trusted": self.trusted,
                            "prices": self._fresh_prices(), "codehashes": self._fresh_hashes()})
         try:
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            tmp = f"{self.path}.tmp"
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(data)
-            os.replace(tmp, self.path)
+            write_private(self.path, data)
             self.dirty = False
         except OSError:
             pass  # a cache that cannot be written is only a missed optimisation

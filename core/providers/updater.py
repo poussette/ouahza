@@ -10,7 +10,7 @@ and an update over the installed app keeps its private data/settings).
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 import re
 
@@ -35,6 +35,20 @@ def parse_version(text) -> tuple[int, int, int] | None:
 
 def valid_repo(repo) -> bool:
     return isinstance(repo, str) and bool(_REPO_RE.fullmatch(repo)) and ".." not in repo
+
+
+_SEG = r"[A-Za-z0-9_.-]{1,100}"
+_RELEASE_URL_RE = re.compile(rf"https://github\.com/{_SEG}/{_SEG}/releases/(?:tag|download)/[A-Za-z0-9_./-]{{1,200}}")
+
+
+def is_release_url(url) -> bool:
+    """A link the app may hand to the system: a release page or asset of a
+    github.com repository, made of plain URL characters only (no space, control
+    or non-ASCII character, no query, no fragment, no userinfo)."""
+    return (
+        isinstance(url, str) and bool(_RELEASE_URL_RE.fullmatch(url))
+        and ".." not in url and "//" not in url[len("https://"):]
+    )
 
 
 VARIANTS = ("universal", "arm64")
@@ -68,7 +82,8 @@ def _pick_asset(assets, repo: str, variant: str = "universal") -> str | None:
             continue
         name, url = a.get("name"), a.get("browser_download_url")
         if (isinstance(name, str) and isinstance(url, str)
-                and name.lower().endswith(".apk") and url.startswith(prefix)):
+                and name.lower().endswith(".apk") and url.startswith(prefix)
+                and is_release_url(url)):
             apks.append((name.lower(), url))
     for name, url in apks:
         if name.endswith(f"-{variant}.apk"):
@@ -117,6 +132,7 @@ def _check_via_redirect(cur: tuple[int, int, int], repo: str, variant: str) -> d
     try:
         resp = requests.get(
             f"https://github.com/{repo}/releases/latest", allow_redirects=False, timeout=(6, 15),
+            stream=True,   # only the headers are read: never download a body
         )
     except requests.RequestException as exc:
         raise HttpError("GitHub injoignable") from exc

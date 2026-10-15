@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -60,9 +60,9 @@ from kivy.uix.widget import Widget
 from kivy.utils import escape_markup, platform
 
 import report
-from providers.safe import clean_text, safe_error, validate_rpc_url
+from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.33"
+APP_VERSION = "0.1.34"
 
 
 def _version_problems() -> list[str]:
@@ -780,17 +780,8 @@ class OuahzaApp(App):
         the app-private directory (other apps cannot read it) and backups are
         disabled in buildozer.spec."""
         self.settings = sanitize_settings(data)
-        tmp = self.settings_path + ".tmp"
         try:
-            os.makedirs(self.user_data_dir, exist_ok=True)
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                json.dump(self.settings, f, ensure_ascii=False, indent=2)
-            try:
-                os.chmod(tmp, 0o600)
-            except OSError:
-                pass
-            os.replace(tmp, self.settings_path)
+            write_private(self.settings_path, json.dumps(self.settings, ensure_ascii=False, indent=2))
         except OSError:
             self.status_label.text = "Impossible d'enregistrer la configuration."
 
@@ -864,10 +855,7 @@ class OuahzaApp(App):
 
     def _save_last_report(self, results, priced_ok):
         try:
-            tmp = self._report_path() + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                f.write(report.dump_results(results, priced_ok, time.time()))
-            os.replace(tmp, self._report_path())
+            write_private(self._report_path(), report.dump_results(results, priced_ok, time.time()))
         except Exception:  # noqa: BLE001 - never block the app for a cache
             pass
 
@@ -878,10 +866,7 @@ class OuahzaApp(App):
         self._fresh = {"at": time.time(), "sig": self._cfg_sig(), "ok": bool(priced_ok and complete),
                        "why": "" if priced_ok and complete else "rapport précédent incomplet"}
         try:
-            tmp = self._meta_path() + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(self._fresh, f)
-            os.replace(tmp, self._meta_path())
+            write_private(self._meta_path(), json.dumps(self._fresh))
         except Exception:  # noqa: BLE001
             pass
 
@@ -1044,7 +1029,8 @@ class OuahzaApp(App):
         "download complete" notification belong to the system (no browser tab);
         tapping that notification opens the installer. False -> use the browser."""
         url = info["url"]
-        if platform != "android" or not url.startswith("https://github.com/") or not url.endswith(".apk"):
+        from providers.updater import is_release_url
+        if platform != "android" or not is_release_url(url) or not url.endswith(".apk"):
             return False
         try:
             from jnius import autoclass
@@ -1121,7 +1107,8 @@ class OuahzaApp(App):
 
     def _open_url(self, url: str) -> None:
         """Hand the release link to the system (browser/download manager)."""
-        if not url.startswith("https://github.com/"):
+        from providers.updater import is_release_url
+        if not is_release_url(url):
             return
         if platform == "android":
             try:

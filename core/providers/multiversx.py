@@ -38,7 +38,7 @@ delegation contract, not the wallet, so it's covered too:
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -58,7 +58,7 @@ import requests
 from . import dataapi, lp
 from .base import BaseProvider, TokenBalance, WalletBalance
 from .net import request_json
-from .safe import clean_text, safe_decimals, safe_error
+from .safe import clean_text, safe_decimals, safe_error, write_private
 
 MVX_API = "https://api.multiversx.com"
 PAGE_SIZE = 100  # max allowed by the public API
@@ -100,7 +100,7 @@ class EmptyCache:
         entries = doc.get("empty") if isinstance(doc, dict) and doc.get("v") == 1 else None
         now = time.time()
         for addr, kinds in (entries.items() if isinstance(entries, dict) else ()):
-            if len(self.data) >= MAX_EMPTY_ENTRIES or not isinstance(addr, str) or not _MVX_RE.match(addr):
+            if len(self.data) >= MAX_EMPTY_ENTRIES or not isinstance(addr, str) or not _MVX_RE.fullmatch(addr):
                 continue
             if not isinstance(kinds, dict):
                 continue
@@ -138,12 +138,7 @@ class EmptyCache:
             blob = json.dumps({"v": 1, "empty": self.data})
             self.dirty = False
         try:
-            os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-            tmp = f"{self.path}.tmp"
-            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(blob)
-            os.replace(tmp, self.path)
+            write_private(self.path, blob)
         except OSError:
             pass  # only a missed optimisation
 
@@ -170,7 +165,7 @@ def _get(path: str):
 def _dicts(value) -> list[dict]:
     return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
 
-_MVX_RE = re.compile(r"^erd1[a-z0-9]{58}$")
+_MVX_RE = re.compile(r"erd1[a-z0-9]{58}")   # always used with fullmatch ($ would accept a trailing newline)
 
 # Maps the API's "type" field to our normalized asset_type.
 _TYPE_MAP = {
@@ -256,7 +251,7 @@ class MultiversXProvider(BaseProvider):
 
     @classmethod
     def matches(cls, address: str) -> bool:
-        return bool(_MVX_RE.match(address.strip()))
+        return bool(_MVX_RE.fullmatch(address.strip()))
 
     truncated = False
 
@@ -289,6 +284,8 @@ class MultiversXProvider(BaseProvider):
         if not amount > 0:  # also rejects NaN
             return None
         api_type = tok.get("type", "FungibleESDT")
+        if not isinstance(api_type, str):   # hostile metadata: an unhashable value would crash the lookup
+            api_type = "FungibleESDT"
         return TokenBalance(
             symbol=clean_text(tok.get("ticker", tok.get("identifier", "?")), 40) or "?",
             name=clean_text(tok.get("name", "Unknown token"), 120) or "Unknown token",

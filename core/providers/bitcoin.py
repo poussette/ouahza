@@ -7,7 +7,7 @@ of scope here), so `tokens` is always empty.
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -27,7 +27,7 @@ BLOCKSTREAM_API = "https://blockstream.info/api"
 
 # Legacy (1...), P2SH (3...), bech32 (bc1q...), taproot (bc1p...)
 _BTC_RE = re.compile(
-    r"^(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{25,90})$"
+    r"(1[a-km-zA-HJ-NP-Z1-9]{25,34}|3[a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-z0-9]{25,90})"   # fullmatch only
 )
 
 
@@ -38,7 +38,7 @@ class BitcoinProvider(BaseProvider):
 
     @classmethod
     def matches(cls, address: str) -> bool:
-        return bool(_BTC_RE.match(address.strip()))
+        return bool(_BTC_RE.fullmatch(address.strip()))
 
     def get_balance(self, address: str) -> WalletBalance:
         address = address.strip()
@@ -56,7 +56,7 @@ class BitcoinProvider(BaseProvider):
             spent = int(chain_stats.get("spent_txo_sum", 0)) + int(
                 mempool_stats.get("spent_txo_sum", 0)
             )
-        except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
+        except (requests.RequestException, ValueError, TypeError, AttributeError, OverflowError) as exc:
             return WalletBalance(
                 chain=self.chain_id,
                 address=address,
@@ -64,7 +64,13 @@ class BitcoinProvider(BaseProvider):
                 error=f"API error: {safe_error(exc)}",
             )
 
-        balance_btc = max(funded - spent, 0) / 1e8
+        satoshis = max(funded - spent, 0)
+        if satoshis > 21_000_000 * 10**8:   # more than the whole supply: the API is lying
+            return WalletBalance(
+                chain=self.chain_id, address=address, native_symbol=self.native_symbol,
+                error="API error: implausible balance (ignored)",
+            )
+        balance_btc = satoshis / 1e8
 
         return WalletBalance(
             chain=self.chain_id,

@@ -26,7 +26,7 @@ optional BEACONCHAIN_API_KEY raises the (generous) default rate limit.
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -35,6 +35,7 @@ __version__ = "0.1.33"
 
 import os
 import re
+from urllib.parse import quote
 
 import requests
 
@@ -81,8 +82,8 @@ def _beacon_key() -> str:
     return os.environ.get("BEACONCHAIN_API_KEY", "")
 
 
-_ETH_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
-_HEX_RE = re.compile(r"^0x[0-9a-fA-F]{1,80}$")
+_ETH_RE = re.compile(r"0x[a-fA-F0-9]{40}")   # fullmatch only: "$" would accept a trailing newline
+_HEX_RE = re.compile(r"0x[0-9a-fA-F]{1,80}")
 
 # ERC-20 balanceOf(address) selector
 _BALANCE_OF_SELECTOR = "0x70a08231"
@@ -95,7 +96,7 @@ _BEACON_CHUNK = 100
 
 def _hex_to_int(raw) -> int | None:
     """Parse a 0x-prefixed hex quantity coming from an RPC; None if invalid."""
-    if not isinstance(raw, str) or not _HEX_RE.match(raw):
+    if not isinstance(raw, str) or not _HEX_RE.fullmatch(raw):
         return None
     return int(raw, 16)
 
@@ -116,7 +117,7 @@ class EthereumProvider(BaseProvider):
 
     @classmethod
     def matches(cls, address: str) -> bool:
-        return bool(_ETH_RE.match(address.strip()))
+        return bool(_ETH_RE.fullmatch(address.strip()))
 
     truncated_contracts = False
 
@@ -176,7 +177,7 @@ class EthereumProvider(BaseProvider):
                 continue
             contract = tx.get("contractAddress")
             # the contract goes into an eth_call: it must be a real address
-            if not isinstance(contract, str) or not _ETH_RE.match(contract):
+            if not isinstance(contract, str) or not _ETH_RE.fullmatch(contract):
                 continue
             if contract in contracts:
                 continue
@@ -207,7 +208,7 @@ class EthereumProvider(BaseProvider):
         as depositor or 0x01 withdrawal-credential recipient."""
         params = {"apikey": _beacon_key()} if _beacon_key() else {}
         data = request_json(
-            "GET", f"{BEACONCHAIN_API}/validator/eth1/{address}", params=params
+            "GET", f"{BEACONCHAIN_API}/validator/eth1/{quote(address, safe='')}", params=params
         )
         result = data.get("data", []) if isinstance(data, dict) else []
         if isinstance(result, dict):  # API returns a dict for a single match
@@ -298,7 +299,7 @@ class EthereumProvider(BaseProvider):
                 for v in balances:
                     try:
                         gwei = int(v.get("balance", 0))
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError, OverflowError):
                         continue
                     if gwei <= 0:
                         continue

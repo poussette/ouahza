@@ -1,3 +1,5 @@
-v0.1.33: Moins d'appels à l'API publique MultiversX et erreurs de passerelle visibles :
-- Avec la data-api, la liste des NFT/SFT n'est plus lue pour un portefeuille qui n'en détient aucun (la passerelle le dit déjà).
-- Si la passerelle MultiversX refuse la requête (HTTP 401, 403 ou 404 : clé ou URL erronée), un avertissement l'indique au lieu de lire l'API publique en silence.
+v0.1.34: Audit de sécurité (aucun changement de calcul ni d'affichage) :
+- Une redirection ne peut plus envoyer une requête vers un service local ou un réseau privé, ni rejouer son corps vers un autre serveur.
+- Un serveur ou un fichier endommagé (réponse hostile, rapport ou cache altéré) ne peut plus faire échouer un portefeuille ou l'application : plus de plantage sur des valeurs infinies, absurdes ou de mauvais type.
+- Liens de mise à jour validés caractère par caractère ; fichiers de cache et de configuration écrits en privé (0600) et sans suivre de lien symbolique.
+- Adresses et URL : refus des retours à la ligne et caractères parasites.

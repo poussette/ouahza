@@ -15,13 +15,14 @@ TLS certificate verification is never disabled.
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
 
 
 
+import ipaddress
 import json
 import threading
 import time
@@ -39,6 +40,16 @@ DEFAULT_MAX_BYTES = 10_000_000
 DEADLINE_SECONDS = 60
 
 _LOOPBACK = ("localhost", "127.0.0.1", "::1")
+
+
+def _is_private_literal(host: str | None) -> bool:
+    """True for an IP *literal* in a private, loopback, link-local or otherwise
+    non-public range (names are not resolved here)."""
+    try:
+        ip = ipaddress.ip_address((host or "").strip("[]"))
+    except ValueError:
+        return False
+    return not ip.is_global
 
 
 class HttpError(requests.RequestException):
@@ -232,13 +243,25 @@ def _send(method, url, params, json_body, timeout, allow_loopback_http, headers=
             return resp
         resp.close()
         previous_host = urlsplit(url).hostname
-        url = urljoin(url, location)
-        if headers and urlsplit(url).hostname != previous_host:
+        try:
+            url = urljoin(url, location)
+            new_host = urlsplit(url).hostname
+        except ValueError:
+            raise HttpError("Refusing redirect to an invalid URL") from None
+        cross_host = new_host != previous_host
+        if headers and cross_host:
             headers = None   # a credential header never follows a redirect to another host
-        if not _https_or_loopback(url, allow_loopback_http):
+        # Plain http is only ever accepted towards a loopback node, and only when
+        # the request was already talking to loopback: a public server must not be
+        # able to bounce the request onto a service listening on this machine.
+        if not _https_or_loopback(url, allow_loopback_http and previous_host in _LOOPBACK):
             raise HttpError("Refusing redirect to a non-HTTPS URL")
+        if cross_host and _is_private_literal(new_host) and not _is_private_literal(previous_host):
+            raise HttpError("Refusing redirect to a private network address")
         if resp.status_code in (301, 302, 303):
             method, json_body = "GET", None
+        if cross_host and json_body is not None:
+            raise HttpError("Refusing cross-host redirect for a request with a body")
         params = None  # the redirect target already carries its own query
     raise HttpError("Too many redirects")
 

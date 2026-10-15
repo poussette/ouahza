@@ -49,7 +49,7 @@ are already picked up by the normal token scan above.)
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -92,7 +92,7 @@ _DUST_THRESHOLD_LAMPORTS = 5_000_000  # 0.005 SOL, comfortably above rent reserv
 
 # Base58, 32-44 chars, no 0/O/I/l. This is a loose check: Solana pubkeys are
 # base58-encoded 32-byte values, so length varies with leading zero bytes.
-_SOL_RE = re.compile(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$")
+_SOL_RE = re.compile(r"[1-9A-HJ-NP-Za-km-z]{32,44}")   # fullmatch only
 
 _token_list_cache: dict[str, dict] | None = None
 
@@ -124,7 +124,7 @@ class SolanaProvider(BaseProvider):
         # Exclude obvious non-Solana formats already claimed by other chains.
         if address.startswith("0x") or address.startswith("bc1") or address.startswith("erd1"):
             return False
-        return bool(_SOL_RE.match(address))
+        return bool(_SOL_RE.fullmatch(address))
 
     def _rpc_call(self, method: str, params: list) -> dict:
         payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
@@ -140,7 +140,7 @@ class SolanaProvider(BaseProvider):
         try:
             result = self._rpc_call("getEpochInfo", [])
             return int(result["result"]["epoch"])
-        except (requests.RequestException, KeyError, TypeError, ValueError):
+        except (requests.RequestException, KeyError, TypeError, ValueError, OverflowError):
             return None
 
     def get_balance(self, address: str) -> WalletBalance:
@@ -156,7 +156,7 @@ class SolanaProvider(BaseProvider):
                 return wallet
             lamports = int(result["result"]["value"])
             wallet.native_amount = lamports / 1e9
-        except (requests.RequestException, KeyError, TypeError, ValueError) as exc:
+        except (requests.RequestException, KeyError, TypeError, ValueError, OverflowError) as exc:
             wallet.error = f"RPC error: {safe_error(exc)}"
             return wallet
 
@@ -177,7 +177,8 @@ class SolanaProvider(BaseProvider):
             return wallet
 
         token_list = _load_token_list()
-        value_list = (token_accounts.get("result") or {}).get("value", [])
+        accounts_result = token_accounts.get("result")
+        value_list = accounts_result.get("value", []) if isinstance(accounts_result, dict) else []
         if not isinstance(value_list, list):
             value_list = []
         if len(value_list) > 2000:
@@ -188,9 +189,9 @@ class SolanaProvider(BaseProvider):
                 mint = info["mint"]
                 token_amount = info["tokenAmount"]
                 amount = safe_amount(token_amount["uiAmountString"] or 0)
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
                 continue
-            if not isinstance(mint, str) or not _SOL_RE.match(mint):
+            if not isinstance(mint, str) or not _SOL_RE.fullmatch(mint):
                 continue
             if not amount:
                 continue
@@ -243,14 +244,16 @@ class SolanaProvider(BaseProvider):
                         deactivation_epoch = int(
                             stake_info.get("deactivationEpoch", _NEVER_DEACTIVATED)
                         )
+                        meta = parsed.get("meta")
+                        authorized = meta.get("authorized") if isinstance(meta, dict) else None
                         withdrawer = clean_text(
-                            parsed.get("meta", {}).get("authorized", {}).get("withdrawer", "?"), 60
+                            authorized.get("withdrawer", "?") if isinstance(authorized, dict) else "?", 60
                         )
                         # Ground truth: the account's real current balance,
                         # not the (possibly stale, post-withdrawal) figure
                         # recorded in delegation.stake.
                         lamports = int(entry["account"]["lamports"])
-                    except (KeyError, TypeError, ValueError):
+                    except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
                         continue
                     if lamports <= _DUST_THRESHOLD_LAMPORTS:
                         # Already unstaked and withdrawn in practice; what's

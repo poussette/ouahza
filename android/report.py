@@ -5,7 +5,7 @@ config format directly instead of pointing at a file on disk)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -331,7 +331,7 @@ def compute_label_totals(results: list[WalletBalance]) -> dict[str, dict[str, fl
         bucket["wallets"] += 1
         if not w.error and w.total_usd is not None:
             bucket["usd"] += w.total_usd
-            bucket["eur"] += w.total_eur
+            bucket["eur"] += w.total_eur or 0.0
             bucket["priced"] += 1
     return totals
 
@@ -407,7 +407,7 @@ def format_table(results: list[WalletBalance]) -> str:
     priced = [w for w in results if not w.error and w.total_usd is not None]
     if priced:
         grand_usd = sum(w.total_usd for w in priced)
-        grand_eur = sum(w.total_eur for w in priced)
+        grand_eur = sum((w.total_eur or 0.0) for w in priced)
         out.write("=" * 40 + "\n")
         out.write(
             f"GRAND TOTAL ({len(priced)} wallet(s) valorises): "

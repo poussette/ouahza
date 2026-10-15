@@ -66,7 +66,7 @@ Optional environment variables:
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -278,7 +278,7 @@ def compute_label_totals(
         bucket["wallets"] += 1
         if not w.error and w.total_usd is not None:
             bucket["usd"] += w.total_usd
-            bucket["eur"] += w.total_eur
+            bucket["eur"] += w.total_eur or 0.0
             bucket["priced"] += 1
     return totals
 
@@ -357,7 +357,7 @@ def print_table(results: list[WalletBalance]) -> None:
     priced = [w for w in results if not w.error and w.total_usd is not None]
     if priced:
         grand_usd = sum(w.total_usd for w in priced)
-        grand_eur = sum(w.total_eur for w in priced)
+        grand_eur = sum((w.total_eur or 0.0) for w in priced)
         print("=" * 40)
         print(
             f"GRAND TOTAL ({len(priced)} wallet(s) priced): "

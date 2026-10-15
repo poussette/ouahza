@@ -13,7 +13,7 @@ using the view names that answer here (see README, "LP tokens").
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -36,6 +36,8 @@ import requests
 
 from providers import lp
 from providers.net import request_json
+from urllib.parse import quote
+
 from providers.safe import clean_text, safe_error, validate_rpc_url
 
 
@@ -85,10 +87,10 @@ def wasm_exports(code: bytes) -> list[str]:
 
 
 def contract_views(sc: str) -> list[str]:
-    acc = request_json("GET", f"{lp.MVX_API}/accounts/{sc}", max_bytes=20_000_000)
+    acc = request_json("GET", f"{lp.MVX_API}/accounts/{quote(sc, safe='')}", max_bytes=20_000_000)
     code = bytes.fromhex(acc.get("code") or "") if isinstance(acc, dict) else b""
     names = sorted(set(wasm_exports(code))) if code else []
-    return [n for n in names if re.match(r"^(get|view|is)[A-Za-z0-9_]*$", n)]
+    return [n for n in names if re.fullmatch(r"(get|view|is)[A-Za-z0-9_]*", n)]
 
 
 def show(raw: bytes) -> str:
@@ -195,7 +197,7 @@ def main() -> int:
                 st = lp._STRATEGY[spec["kind"]](spec, args.lp, facts, sc, {}, lp.Budget(200))
                 print(f"   {spec['name']:<16} {'MATCH' if st else 'no (views absent / not this dialect)'}")
             except lp.Inconsistent as exc:
-                print(f"   {spec['name']:<16} CONTRADICTED: {exc}")
+                print(f"   {spec['name']:<16} CONTRADICTED: {safe_error(exc)}")
             except (requests.RequestException, ValueError) as exc:
                 print(f"   {spec['name']:<16} error: {safe_error(exc)}")
 
@@ -212,7 +214,7 @@ def main() -> int:
                     more = f" (+{len(out) - 8} more)" if len(out) > 8 else ""
                     print(f"{name}{label}: " + " | ".join(show(x) for x in out[:8]) + more)
         try:
-            h = request_json("GET", f"{lp.MVX_API}/accounts/{sc}", params={"fields": "codeHash"})
+            h = request_json("GET", f"{lp.MVX_API}/accounts/{quote(sc, safe='')}", params={"fields": "codeHash"})
             print(f"\ncode hash of {sc}: {clean_text(str(h.get('codeHash')), 60)}")
         except requests.RequestException:
             pass
@@ -233,7 +235,7 @@ def main() -> int:
                 continue
             print(f"{name}: " + (" | ".join(show(x) for x in out[:8]) if out else "(needs arguments / no answer)"))
         try:
-            held = request_json("GET", f"{lp.MVX_API}/accounts/{sc}/tokens", params={"size": 20})
+            held = request_json("GET", f"{lp.MVX_API}/accounts/{quote(sc, safe='')}/tokens", params={"size": 20})
         except requests.RequestException:
             held = []
         print(f"--- fungible tokens held by {sc} (first 20) ---")

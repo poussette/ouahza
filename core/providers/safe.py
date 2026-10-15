@@ -12,7 +12,7 @@ UI markup, or (d) poison totals with NaN/inf/absurd numbers.
 
 from __future__ import annotations
 
-__version__ = "0.1.33"
+__version__ = "0.1.34"
 
 
 
@@ -141,6 +141,10 @@ def validate_rpc_url(url: str | None) -> str | None:
     if not url:
         return None
     url = url.strip()
+    # no whitespace / control / non-ASCII character anywhere (pasted text with a
+    # stray newline or a look-alike character must not turn into a request URL)
+    if not url.isascii() or any(ord(c) <= 32 or ord(c) == 127 for c in url):
+        return None
     try:
         parts = urlsplit(url)
         host = parts.hostname
@@ -185,6 +189,32 @@ def safe_decimals(value, default: int | None = None) -> int | None:
     return d if 0 <= d <= MAX_DECIMALS else default
 
 
+# -------------------------------------------------------------------- files
+
+def write_private(path: str, text: str) -> None:
+    """Write `text` to `path` atomically, readable by the owner only: a 0600
+    temp file next to it (never following a symlink planted at that name),
+    then a rename. A new directory is created 0700. Raises OSError."""
+    directory = os.path.dirname(path) or "."
+    os.makedirs(directory, mode=0o700, exist_ok=True)
+    tmp = f"{path}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        try:
+            os.chmod(tmp, 0o600)     # also tighten a leftover file from an older run
+        except OSError:
+            pass
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 # ---------------------------------------------------------------------- csv
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
@@ -205,6 +235,19 @@ def csv_text(value) -> str:
 
 
 # ------------------------------------------------------------------ wallets
+
+#: ceiling for a monetary value (USD/EUR) read back from a saved report. A value
+#: may be negative (a borrow is deducted), so only its magnitude is bounded.
+MAX_VALUE = 1e15
+
+
+def safe_value(value) -> float | None:
+    """A finite number of magnitude <= MAX_VALUE, else None (NaN, inf, text...)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    v = float(value)
+    return v if math.isfinite(v) and abs(v) <= MAX_VALUE else None
+
 
 def sanitize_wallet(w) -> None:
     """Clean a WalletBalance in place right after a provider returned it:
@@ -227,6 +270,9 @@ def sanitize_wallet(w) -> None:
         else:
             w.native_amount = amount
 
+    for field in ("native_usd_value", "native_eur_value", "total_usd", "total_eur"):
+        setattr(w, field, safe_value(getattr(w, field, None)))
+
     kept = []
     dropped = 0
     for t in w.tokens:
@@ -235,6 +281,8 @@ def sanitize_wallet(w) -> None:
             dropped += 1
             continue
         t.amount = amount
+        t.usd_value = safe_value(t.usd_value)
+        t.eur_value = safe_value(t.eur_value)
         t.symbol = clean_text(t.symbol, MAX_SYMBOL) or "?"
         t.name = clean_text(t.name, MAX_TEXT) or "?"
         t.contract = clean_text(t.contract, 200) if t.contract else t.contract
