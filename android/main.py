@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.42"
+__version__ = "0.1.43"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.42"
+APP_VERSION = "0.1.43"
 
 
 def _version_problems() -> list[str]:
@@ -309,9 +309,12 @@ def mk_amount(text, size=14, **kwargs):
     base = sp(size)
 
     def refit(w, *_):
-        w.font_size = fit_font_size(w.text, base, w.width - dp(2), bold=bold)
+        w.font_size = fit_font_size(w.text, base, (w.width - dp(4)) * 0.94, bold=bold)
 
-    lbl.bind(width=refit)
+    # Fixed-width labels never fire a width change, so fit once right away,
+    # then again whenever the width or the text changes.
+    lbl.bind(width=refit, text=refit)
+    refit(lbl)
     return lbl
 
 

@@ -1,5 +1,2 @@
-v0.1.42 : Finitions
-- Les très gros montants (total, labels, wallets) rétrécissent pour tenir sur une seule ligne au lieu de passer à la ligne.
-- Ethereum : le serveur eth.llamarpc.com (en panne SSL) est essayé en dernier.
-- ETH staké : si beaconcha.in refuse l'accès (clé API désormais obligatoire), le wallet l'indique clairement.
-- Tests : plus d'avertissements de fichiers non fermés.
+v0.1.43 : Correction d'affichage
+- Les très gros montants des cartes (labels, wallets) rétrécissent réellement pour tenir sur une seule ligne (la correction de la 0.1.42 ne s'appliquait pas aux colonnes de largeur fixe).
