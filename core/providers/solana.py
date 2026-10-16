@@ -1,8 +1,11 @@
 """Solana provider, backed by the public mainnet-beta JSON-RPC endpoint.
 
-No API key required. SPL token symbols/names are resolved via Jupiter's
-public token list (best-effort, cached in-process); unknown mints just show
-their mint address as the symbol.
+No API key required. SPL token symbols/names and USD prices come from
+Jupiter's public search API (best-effort, cached in-process, one request for
+up to 50 mints); unknown mints just show their mint address as the symbol and
+stay unpriced. A price is only used when Jupiter reports enough liquidity
+behind it (MIN_LIQUIDITY_USD): airdrop spam is often "priced" by a pool
+holding a few dollars.
 
 Native SOL staked through the built-in Stake Program lives in separate
 "stake accounts" owned by the Stake program, not in the wallet's own
@@ -49,7 +52,7 @@ are already picked up by the normal token scan above.)
 
 from __future__ import annotations
 
-__version__ = "0.1.39"
+__version__ = "0.1.40"
 
 
 
@@ -65,7 +68,7 @@ import requests
 
 from .base import BaseProvider, TokenBalance, WalletBalance
 from .net import request_json
-from .safe import MAX_ENTRIES, clean_text, safe_amount, safe_error, validate_rpc_url
+from .safe import MAX_ENTRIES, clean_text, safe_amount, safe_error, safe_price, validate_rpc_url
 
 _DEFAULT_SOLANA_RPC = "https://api.mainnet-beta.solana.com"
 
@@ -84,6 +87,8 @@ _META_MAX_MINTS = 200     # per wallet; airdrop-spam beyond that keeps its short
 _META_RETRY_AFTER = 60.0  # seconds without retrying after a failed lookup
 #: name given to a token Jupiter does not know (usually airdrop spam)
 UNKNOWN_TOKEN_NAME = "Unknown SPL token"
+#: a Jupiter price is trusted only when this much USD liquidity stands behind it
+MIN_LIQUIDITY_USD = 10_000.0
 SPL_TOKEN_PROGRAM_ID = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 STAKE_PROGRAM_ID = "Stake11111111111111111111111111111111111111"
 # Stake account layout: 4-byte enum tag + 8-byte rent_exempt_reserve, then
@@ -110,6 +115,20 @@ _SOL_RE = re.compile(r"[1-9A-HJ-NP-Za-km-z]{32,44}")   # fullmatch only
 _token_meta_cache: dict[str, dict] = {}
 _token_meta_lock = threading.Lock()
 _token_meta_failed_at: float | None = None
+
+
+def _jupiter_price(meta: dict) -> float | None:
+    """Unit USD price from a Jupiter record, only if it is finite, positive and
+    backed by at least MIN_LIQUIDITY_USD of liquidity."""
+    price = safe_price(meta.get("usdPrice"))
+    liquidity = safe_amount(meta.get("liquidity"))
+    if price is None or liquidity is None or liquidity < MIN_LIQUIDITY_USD:
+        return None
+    return price
+
+
+def _token_meta_recently_failed() -> bool:
+    return _token_meta_failed_at is not None and time.monotonic() - _token_meta_failed_at < _META_RETRY_AFTER
 
 
 def _lookup_token_meta(mints: list[str]) -> dict[str, dict]:
@@ -228,14 +247,23 @@ class SolanaProvider(BaseProvider):
         metas = _lookup_token_meta([m for m, _ in held]) if held else {}
         for mint, amount in held:
             meta = metas.get(mint) or {}
-            wallet.tokens.append(
-                TokenBalance(
-                    symbol=clean_text(meta.get("symbol"), 40) or (mint[:6] + "…"),
-                    name=clean_text(meta.get("name"), 120) or UNKNOWN_TOKEN_NAME,
-                    amount=amount,
-                    contract=mint,
-                )
+            tb = TokenBalance(
+                symbol=clean_text(meta.get("symbol"), 40) or (mint[:6] + "…"),
+                name=clean_text(meta.get("name"), 120) or UNKNOWN_TOKEN_NAME,
+                amount=amount,
+                contract=mint,
             )
+            if meta:
+                # Jupiter knows this token: its price (when liquid enough) is used and no other
+                # price source is asked; the EUR value is added by apply_pricing.
+                tb.price_locked = True
+                price = _jupiter_price(meta)
+                if price is not None:
+                    tb.usd_value = amount * price
+            wallet.tokens.append(tb)
+        if held and any(not metas.get(m) for m, _ in held) and _token_meta_recently_failed():
+            wallet.warning = (wallet.warning + "; " if wallet.warning else "") + \
+                "token names and prices unavailable (Jupiter unreachable)"
 
         def _add_warning(msg: str) -> None:
             wallet.warning = (wallet.warning + "; " if wallet.warning else "") + msg

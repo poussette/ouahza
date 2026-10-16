@@ -1,4 +1,4 @@
-v0.1.39 : Actualisation qui se termine toujours :
-- Un wallet Solana qui contient des milliers de tokens (airdrops) ne bloque plus l'actualisation : la recherche des prix est limitée (250 tokens par chaîne, 45 s, arrêt si le service de prix refuse deux fois de suite). Les tokens connus sont valorisés en premier.
-- Les tokens non valorisés à cause de cette limite sont signalés dans la ligne de statut.
-- Le message « Recherche des prix... » s'affiche pendant cette étape.
+v0.1.40 : Prix des tokens corrigés (Ethereum et Solana) :
+- Solana : les tokens sont valorisés avec le prix de Jupiter (déjà utilisé pour leurs noms), seulement s'il y a au moins 10 000 $ de liquidité derrière ; les tokens de spam restent sans valeur. Si Jupiter est injoignable, le wallet l'indique.
+- Ethereum : les prix viennent de DefiLlama (sans clé, 40 tokens par requête), seuls les prix de confiance ≥ 0,9 sont retenus ; CoinGecko (qui refuse désormais plus d'un token par requête, erreur 400) ne sert plus que de secours pour 5 tokens au plus.
+- Les tokens que le provider n'a pas pu nommer (spam) ne sont jamais interrogés ; au plus 200 tokens examinés par chaîne. Les limites atteintes ou une source en panne sont indiquées dans la ligne de statut.

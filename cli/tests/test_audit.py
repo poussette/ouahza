@@ -14,9 +14,11 @@ from pathlib import Path
 from unittest import mock
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
-sys.path.insert(0, str(HERE.parent.parent / "core"))
+# android/ first, core/ last (so core/ wins): android/providers and android/pricing are
+# git-ignored copies made by tools/sync_core.sh, possibly stale, and must not shadow core/.
 sys.path.insert(0, str(HERE.parent.parent / "android"))
+sys.path.insert(0, str(HERE.parent.parent / "core"))
+sys.path.insert(0, str(HERE.parent))
 
 import report  # noqa: E402
 from providers import bitcoin, ethereum, lp, multiversx, net, safe, solana, updater  # noqa: E402

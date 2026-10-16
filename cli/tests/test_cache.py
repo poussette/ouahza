@@ -82,7 +82,8 @@ class CacheTests(unittest.TestCase):
         self.assertIn(MINT, a)
         self.assertNotIn(other, a)
         self.assertEqual(a.keys(), b.keys())
-        self.assertEqual(len(fake.calls), 1)
+        # CoinGecko's keyless API takes one contract per request; the second pass is all cache
+        self.assertEqual(len(fake.calls), 2)
 
     def test_mex_prices_cached_and_copy_is_safe(self):
         fake = counting({"mex-tokens": FakeResp([{"id": "MEX-455c57", "price": 0.5}])})
@@ -141,7 +142,8 @@ class CacheTests(unittest.TestCase):
     def test_second_apply_pricing_makes_no_price_call(self):
         fake = counting({
             "simple/price": FakeResp({"ethereum": {"usd": 2000, "eur": 1800}}),
-            "token_price": FakeResp({("0x" + "cd" * 20): {"usd": 2, "eur": 1.8}}),
+            "coins.llama.fi": FakeResp({"coins": {"ethereum:0x" + "cd" * 20: {"price": 2, "confidence": 0.99}}}),
+            "frankfurter": FakeResp({"rates": {"EUR": 0.9}}),
         })
 
         def run():

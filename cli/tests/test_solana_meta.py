@@ -141,3 +141,70 @@ class TokenMetaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class JupiterPriceTests(unittest.TestCase):
+    """Solana tokens are valued from Jupiter's answer (no CoinGecko, which takes one contract per request)."""
+
+    def setUp(self):
+        solana._token_meta_cache.clear()
+        solana._token_meta_failed_at = None
+
+    def read(self, mints, jupiter):
+        with mock.patch.object(solana, "request_json", side_effect=make(mints, jupiter)):
+            return solana.SolanaProvider().get_balance("A" * 44)
+
+    @staticmethod
+    def record(mint, symbol, price, liquidity):
+        return {"id": mint, "symbol": symbol, "name": symbol, "usdPrice": price, "liquidity": liquidity}
+
+    def test_liquid_token_is_valued_and_locked(self):
+        w = self.read([USDC], lambda u: [self.record(USDC, "USDC", 0.9995, 4.4e8)])
+        tok = w.tokens[0]
+        self.assertTrue(tok.price_locked)
+        self.assertAlmostEqual(tok.usd_value, 0.9995)       # amount 1 x price
+
+    def test_illiquid_token_stays_unpriced_but_locked(self):
+        w = self.read([ODD], lambda u: [self.record(ODD, "SPAM", 5.0, 120.0)])
+        tok = w.tokens[0]
+        self.assertTrue(tok.price_locked)                  # known to Jupiter, deliberately unpriced
+        self.assertIsNone(tok.usd_value)
+
+    def test_hostile_values_give_no_price(self):
+        for price, liq in ((float("nan"), 1e9), (-1, 1e9), ("x", 1e9), (1.0, "x"), (1.0, None), (1e30, 1e9), (True, True)):
+            solana._token_meta_cache.clear()
+            w = self.read([USDC], lambda u, p=price, l=liq: [self.record(USDC, "USDC", p, l)])
+            self.assertIsNone(w.tokens[0].usd_value, (price, liq))
+
+    def test_unknown_token_is_not_locked(self):
+        w = self.read([ODD], lambda u: [])
+        self.assertFalse(w.tokens[0].price_locked)
+        self.assertIsNone(w.tokens[0].usd_value)
+
+    def test_jupiter_down_is_reported_on_the_wallet(self):
+        def down(url):
+            raise HttpError("down")
+        w = self.read([USDC], down)
+        self.assertIn("Jupiter", w.warning or "")
+
+    def test_end_to_end_eur_value_and_no_coingecko_token_call(self):
+        import pricing
+        from test_security import FakeResp
+        pricing.clear_cache()
+        w = self.read([USDC], lambda u: [self.record(USDC, "USDC", 1.0, 4.4e8)])
+        w.tokens[0].amount = 8_000_000.0
+        w.tokens[0].usd_value = 8_000_000.0
+        seen = []
+
+        def fake(method, url, **kw):
+            seen.append(url)
+            if "simple/price" in url:
+                return FakeResp({"solana": {"usd": 100, "eur": 90}})
+            if "frankfurter" in url:
+                return FakeResp({"rates": {"EUR": 0.9}})
+            raise requests.ConnectionError("unexpected " + url)
+        with mock.patch("requests.request", fake):
+            pricing.apply_pricing([w])
+        self.assertAlmostEqual(w.tokens[0].eur_value, 7_200_000.0)
+        self.assertFalse(any("token_price" in u for u in seen))
+        self.assertGreaterEqual(w.total_eur, 7_200_000.0)

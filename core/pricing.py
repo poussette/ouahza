@@ -25,7 +25,7 @@ address, its platform id to TOKEN_PLATFORM_IDS.
 
 from __future__ import annotations
 
-__version__ = "0.1.39"
+__version__ = "0.1.40"
 
 
 
@@ -36,6 +36,7 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import quote
 
 import requests
 
@@ -51,13 +52,25 @@ FX_API = "https://api.frankfurter.app"  # free, no key, ECB-sourced FX rates
 
 #: hard stop for paginated endpoints (hostile/buggy API repeating full pages).
 MAX_PAGES = 20
-#: CoinGecko's free tier is slow (one call every 1.5 s, and a refused call is
-#: retried several times), so the token price pass is bounded: a wallet full of
-#: airdrop spam (thousands of tokens) must not keep the refresh running for
-#: minutes. Tokens the pass does not reach stay unpriced, with a note.
-MAX_CONTRACTS_PER_CHAIN = 250     # = 5 requests of 50
+#: Token prices (Ethereum) come from DefiLlama's keyless price API, which takes many
+#: tokens per request ("ethereum:0x…,ethereum:0x…"); only a price it is confident
+#: about is used. CoinGecko, the secondary source, answers HTTP 400 (error_code 10012,
+#: "Number of contract addresses in the request exceeds the allowed limit") as soon as
+#: /simple/token_price receives two contract addresses, and allows only 10-30 calls a
+#: minute: it is asked one token per request, for a few of the tokens DefiLlama could not
+#: price. Every pass is bounded: a wallet full of airdrop spam must not keep the refresh
+#: running for minutes. Tokens a pass does not reach stay unpriced, with a note when that
+#: is due to a limit or an outage. (Solana tokens are priced by Jupiter, in
+#: providers/solana.py, and normally never come here.)
+LLAMA_API = "https://coins.llama.fi"
+LLAMA_CHAINS = {"ethereum": "ethereum"}
+LLAMA_BATCH = 40                  # tokens per request
+LLAMA_MIN_CONFIDENCE = 0.9
+COINGECKO_BATCH = 1
+FALLBACK_CONTRACTS = 5            # CoinGecko requests per chain and refresh
+MAX_CONTRACTS_PER_CHAIN = 200     # tokens examined per chain (spam guard)
 TOKEN_PRICE_BUDGET = 45.0         # seconds after which no new request is started
-TOKEN_FAIL_LIMIT = 2              # consecutive refused requests after which the pass stops
+TOKEN_FAIL_LIMIT = 3              # consecutive refused requests after which a pass stops
 _SKIPPED: dict[str, int] = {}     # chain -> tokens left unpriced by those limits
 _skipped_lock = threading.Lock()
 #: a USD->EUR rate outside this range is an API glitch, not a real FX rate.
@@ -207,6 +220,34 @@ def _by_priority(tokens) -> list:
     return sorted(tokens, key=lambda t: 1 if t.name == UNKNOWN_TOKEN_NAME else 0)
 
 
+def _fetch_llama(chain_id: str, contracts: list[str], started: float) -> tuple[dict[str, float], bool]:
+    """({contract_lowercase: usd price}, complete) from DefiLlama; `complete` is False
+    when a request failed or the time budget ran out."""
+    slug = LLAMA_CHAINS[chain_id]
+    found: dict[str, float] = {}
+    for i in range(0, len(contracts), LLAMA_BATCH):
+        if time.monotonic() - started > TOKEN_PRICE_BUDGET:
+            return found, False
+        ids = ",".join(f"{slug}:{c}" for c in contracts[i : i + LLAMA_BATCH])
+        try:
+            data = request_json("GET", f"{LLAMA_API}/prices/current/{quote(ids, safe=':,')}")
+        except requests.RequestException:
+            return found, False
+        coins = data.get("coins") if isinstance(data, dict) else None
+        if not isinstance(coins, dict):
+            return found, False
+        for key, rec in coins.items():
+            if not isinstance(key, str) or not isinstance(rec, dict):
+                continue
+            conf = rec.get("confidence")
+            if isinstance(conf, bool) or not isinstance(conf, (int, float)) or not conf >= LLAMA_MIN_CONFIDENCE:
+                continue
+            price = safe_price(rec.get("price"))
+            if price is not None:
+                found[key.partition(":")[2].lower()] = price
+    return found, True
+
+
 def _fetch_token_prices(
     chain_id: str, contracts
 ) -> dict[str, dict[str, float]]:
@@ -231,8 +272,20 @@ def _fetch_token_prices(
                 todo.append(c)
             elif hit:
                 _store(c, hit)
-        chunk_size = 50  # keep query strings/URLs reasonably sized
         started = time.monotonic()
+        if chain_id in LLAMA_CHAINS and todo:
+            found, complete = _fetch_llama(chain_id, todo, started)
+            for c in todo:
+                if c.lower() in found:
+                    clean = {"usd": found[c.lower()]}
+                    _store(c, clean)
+                    _cache_put(("tok", chain_id, c), clean)
+            todo = [c for c in todo if c.lower() not in found]
+            if len(todo) > FALLBACK_CONTRACTS:
+                if not complete:               # the main source failed: say so
+                    _note_skipped(chain_id, len(todo) - FALLBACK_CONTRACTS)
+                todo = todo[:FALLBACK_CONTRACTS]
+        chunk_size = COINGECKO_BATCH
         failures = 0
         for i in range(0, len(todo), chunk_size):
             if failures >= TOKEN_FAIL_LIMIT or time.monotonic() - started > TOKEN_PRICE_BUDGET:
@@ -397,6 +450,8 @@ def _price_token(
         tp = token_prices.get(tok.contract) or token_prices.get(tok.contract.lower())
         usd = tp.get("usd") if tp else None
         eur = tp.get("eur") if tp else None
+        if eur is None and usd is not None and usd_eur_rate is not None:
+            eur = usd * usd_eur_rate           # DefiLlama prices are in USD only
     else:
         # NFTs/SFTs etc.: no reliable floor-price source here.
         return
@@ -500,6 +555,8 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
             if tok.asset_type in CONTRACT_PRICED_TYPES and tok.contract:
                 if w.chain == "multiversx":
                     multiversx_identifiers.add(tok.contract)
+                elif tok.name == UNKNOWN_TOKEN_NAME:
+                    continue          # unnamed = airdrop spam: not worth a rate-limited request
                 else:
                     ordered.setdefault(w.chain, {})[
                         tok.contract.lower() if w.chain == "ethereum" else tok.contract
@@ -534,7 +591,7 @@ def apply_pricing(results: list[WalletBalance], on_progress=None) -> bool:
 
     # Lines a provider valued itself (providers/dataapi.py) only need the
     # USD -> EUR conversion, not a price source.
-    needs_fx = bool(multiversx_identifiers) or any(
+    needs_fx = bool(multiversx_identifiers) or any(chain in LLAMA_CHAINS for chain in contracts_by_chain) or any(
         tok.price_locked and tok.usd_value is not None
         for w in results if not w.error
         for tok in w.tokens
