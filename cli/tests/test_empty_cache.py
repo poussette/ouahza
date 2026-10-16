@@ -19,6 +19,21 @@ from test_security import FakeResp
 
 net.THROTTLE_ENABLED = False
 net.RETRY_DELAYS = ()
+
+def _jload(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _jdump(obj, path):
+    with open(path, "w") as f:
+        json.dump(obj, f)
+
+
+def _write(path, text):
+    with open(path, "w") as f:
+        f.write(text)
+
 REAL_TIME = time.time
 ADDR = "erd1" + "q" * 58
 OTHER = "erd1" + "w" * 58
@@ -133,7 +148,7 @@ class EmptyCacheTests(unittest.TestCase):
     def test_persisted_and_expiring(self):
         self.balance(api())
         mvx.save_empty_cache()
-        doc = json.load(open(self.path))
+        doc = _jload(self.path)
         self.assertEqual(set(doc["empty"][ADDR]), {"legacy", "stake"})
         mvx.set_empty_cache_path(None)
         mvx.set_empty_cache_path(self.path)                      # app restarted

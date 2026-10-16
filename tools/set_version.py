@@ -6,7 +6,9 @@
 Updates: core/providers/version.py (VERSION), the `__version__` stamp of every
 source file, APP_VERSION in android/main.py and `version =` in
 android/buildozer.spec. The Android build, the GitHub Release tag and the
-in-app update check all derive from that number, so run this before each
+in-app update check all derive from that number. The first line of
+android/release_notes.txt ("vX.Y.Z : title") is stamped too, so the notes can
+never disagree with the release. Run this before each
 release (the new number must be higher than the previous one).
 """
 import re
@@ -38,6 +40,12 @@ def main() -> int:
         sub(f, r'^__version__ = ".*"$', f'__version__ = "{v}"')
     sub(ROOT / "android/main.py", r'^APP_VERSION = ".*"$', f'APP_VERSION = "{v}"')
     sub(ROOT / "android/buildozer.spec", r"^version = .*$", f"version = {v}")
+    notes = ROOT / "android/release_notes.txt"
+    if notes.exists():
+        text = notes.read_text(encoding="utf-8")
+        new, n = re.subn(r"\Av\d+\.\d+\.\d+", f"v{v}", text, count=1)
+        if n:
+            notes.write_text(new, encoding="utf-8")
     print(f"version -> {v} ({len(stamped)} fichiers + version.py + APP_VERSION + buildozer.spec)")
     return 0
 

@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.40"
+__version__ = "0.1.42"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.40"
+APP_VERSION = "0.1.42"
 
 
 def _version_problems() -> list[str]:
@@ -276,6 +276,42 @@ def mk_label(text, size=14, color=TEXT, bold=False, halign="left", markup=False,
         valign="middle", markup=markup, **kwargs,
     )
     lbl.bind(size=lambda w, s: setattr(w, "text_size", s))
+    return lbl
+
+
+_MARKUP_RE = re.compile(r"\[/?[a-z]+(?:=[^\]]*)?\]")
+
+
+def fit_font_size(text, base_px, avail_px, min_ratio=0.5, bold=False):
+    """Font size (px) so ``text`` fits on ONE line of ``avail_px`` (never
+    below ``min_ratio`` of ``base_px``). Used for money amounts: a very large
+    balance must shrink, not wrap onto a second line."""
+    plain = _MARKUP_RE.sub("", text or "")
+    if not plain or avail_px <= 0:
+        return base_px
+    try:
+        from kivy.core.text import Label as CoreLabel
+        core = CoreLabel(text=plain, font_size=base_px, bold=bold)
+        core.refresh()
+        width = core.texture.width if core.texture else 0
+    except Exception:
+        width = len(plain) * base_px * 0.6  # rough fallback
+    if width <= avail_px:
+        return base_px
+    return max(base_px * min_ratio, base_px * avail_px / width)
+
+
+def mk_amount(text, size=14, **kwargs):
+    """Single-line right-aligned amount label that shrinks to fit its width."""
+    kwargs.setdefault("halign", "right")
+    bold = kwargs.get("bold", False)
+    lbl = mk_label(text, size=size, **kwargs)
+    base = sp(size)
+
+    def refit(w, *_):
+        w.font_size = fit_font_size(w.text, base, w.width - dp(2), bold=bold)
+
+    lbl.bind(width=refit)
     return lbl
 
 
@@ -1783,9 +1819,12 @@ class OuahzaApp(App):
         hero = Panel(bg=CLEAR, padding=(dp(4), dp(6), dp(4), 0), spacing=dp(2))
         hero.add_widget(WrapLabel(text="TOTAL", color=MUTED, font_size=sp(12), min_height=dp(22)))
         eur_int, eur_dec = f"{grand_eur:,.2f}".split(".")
+        # Huge balances shrink instead of wrapping onto a second line.
+        hero_px = fit_font_size(
+            f"€{eur_int}.{eur_dec}", sp(44), Window.width - dp(16), min_ratio=0.4, bold=True)
         hero.add_widget(WrapLabel(
-            text=f"[b]€{eur_int}[/b][size={int(sp(22))}][color={FAINT_HEX}].{eur_dec}[/color][/size]",
-            markup=True, font_size=sp(44),
+            text=f"[b]€{eur_int}[/b][size={int(hero_px / 2)}][color={FAINT_HEX}].{eur_dec}[/color][/size]",
+            markup=True, font_size=hero_px,
         ))
         sub = f"≈ {fmt_usd(grand_usd)}  ·  {len(priced)} valorisé(s) sur {len(results)}"
         if errors:
@@ -1890,8 +1929,8 @@ class OuahzaApp(App):
         )
         card.add_widget(Dot(e["color"]))
         card.add_widget(mk_label(esc(e["name"]), size=14, bold=True, markup=True))
-        card.add_widget(mk_label(
-            fmt_eur0(e["eur"]), size=14, bold=True, halign="right", size_hint=(None, 1), width=dp(100),
+        card.add_widget(mk_amount(
+            fmt_eur0(e["eur"]), size=14, bold=True, size_hint=(None, 1), width=dp(100),
         ))
         chev = Chevron()
         chev.open = True
@@ -1940,8 +1979,8 @@ class OuahzaApp(App):
         row1 = BoxLayout(size_hint=(1, None), height=dp(26), spacing=dp(10))
         row1.add_widget(Dot(e["color"]))
         row1.add_widget(mk_label(esc(e["name"]), size=15, bold=True, markup=True))
-        row1.add_widget(mk_label(
-            fmt_eur0(e["eur"]), size=16, bold=True, halign="right", size_hint=(None, 1), width=dp(100),
+        row1.add_widget(mk_amount(
+            fmt_eur0(e["eur"]), size=16, bold=True, size_hint=(None, 1), width=dp(100),
         ))
         chev = Chevron()
         row1.add_widget(chev)
@@ -1998,8 +2037,8 @@ class OuahzaApp(App):
             total = f"[color={RED_HEX}]erreur[/color]"
         else:
             total = fmt_eur(w.total_eur)
-        card.add_widget(mk_label(
-            total, size=13, bold=True, halign="right", markup=True, size_hint=(None, 1), width=dp(84),
+        card.add_widget(mk_amount(
+            total, size=13, bold=True, markup=True, size_hint=(None, 1), width=dp(84),
         ))
         card.add_widget(chev)
         return card, chev
@@ -2022,11 +2061,11 @@ class OuahzaApp(App):
             for typ, (n, usd, eur) in sorted(stats.items(), key=lambda kv: -kv[1][2]):
                 line = BoxLayout(size_hint=(1, None), height=dp(20))
                 line.add_widget(mk_label(f"[b]{n}[/b] {esc(typ)}", size=12, markup=True))
-                line.add_widget(mk_label(
-                    fmt_eur(eur), size=12, color=MUTED, halign="right", size_hint=(None, 1), width=dp(96)))
+                line.add_widget(mk_amount(
+                    fmt_eur(eur), size=12, color=MUTED, size_hint=(None, 1), width=dp(96)))
                 line.add_widget(mk_label(
                     "-", size=12, color=MUTED, halign="center", size_hint=(None, 1), width=dp(16)))
-                line.add_widget(mk_label(
+                line.add_widget(mk_amount(
                     fmt_usd(usd), size=12, color=MUTED, halign="left", size_hint=(None, 1), width=dp(78)))
                 summary.add_widget(line)
             body.add_widget(summary)

@@ -126,11 +126,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.buildozer
-          key: buildozer-${{ runner.os }}-p4a2024-${{ matrix.name }}-${{ hashFiles('android/buildozer.spec') }}
+          # Sans le numéro de version : `version =` change à chaque release, ce qui invalidait
+          # le cache (et retéléchargeait 1-2 Go de SDK/NDK à chaque fois). À incrémenter (v1 -> v2)
+          # seulement si le NDK, l'API Android ou python-for-android changent.
+          key: buildozer-${{ runner.os }}-p4a2024-${{ matrix.name }}-ndk25b-api33-v1
 
       - name: Build APK
         shell: bash   # bash -eo pipefail: a buildozer failure fails the step
-        run: buildozer -v android debug 2>&1 | tee build.log
+        run: |
+          # Les pannes passagères d'un serveur externe (ex. skia.googlesource.com en HTTP 503,
+          # téléchargement tronqué du NDK) font échouer le build sans rapport avec le code :
+          # on retente une fois, après une pause, en supprimant les archives éventuellement incomplètes.
+          for attempt in 1 2; do
+            if buildozer -v android debug 2>&1 | tee build.log; then exit 0; fi
+            echo "::warning::buildozer a échoué (essai $attempt/2)"
+            if [ "$attempt" = 1 ]; then
+              rm -f ~/.buildozer/android/platform/*.zip
+              sleep 90
+            fi
+          done
+          exit 1
 
       - name: Show the end of the log (on failure)
         if: failure()

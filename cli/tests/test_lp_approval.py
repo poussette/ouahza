@@ -14,6 +14,21 @@ import pricing
 from providers import lp
 from test_lp import E18, LPID, OTHER, WEGLD, Chain, pair_views, run
 
+
+def _jload(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _jdump(obj, path):
+    with open(path, "w") as f:
+        json.dump(obj, f)
+
+
+def _write(path, text):
+    with open(path, "w") as f:
+        f.write(text)
+
 H = "evil" + "A" * 39 + "="
 
 
@@ -49,7 +64,7 @@ class ApprovalTests(unittest.TestCase):
         lp.set_cache_path(path)
         run(unknown_pool())
         self.assertTrue(lp.approve_pending(LPID))
-        self.assertEqual(json.load(open(path))["trusted"], {H: "xexchange-pair"})
+        self.assertEqual(_jload(path)["trusted"], {H: "xexchange-pair"})
         lp.set_cache_path(None)
         lp.set_cache_path(path)                    # new session reads the file
         self.assertIn(LPID, run(unknown_pool()))
@@ -64,7 +79,7 @@ class ApprovalTests(unittest.TestCase):
         self.assertTrue(lp.revoke_approval(H))
         self.assertFalse(lp.revoke_approval(H))
         self.assertEqual(lp.approved_contracts(), [])
-        self.assertEqual(json.load(open(path))["trusted"], {})
+        self.assertEqual(_jload(path)["trusted"], {})
         self.assertEqual(run(unknown_pool()), {})                 # offered again, not valued
         self.assertEqual([p["lp"] for p in lp.pending_approvals()], [LPID])
         lp.set_cache_path(None)

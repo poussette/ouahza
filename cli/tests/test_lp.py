@@ -21,6 +21,21 @@ from test_security import FakeResp
 net.THROTTLE_ENABLED = False
 net.RETRY_DELAYS = ()
 
+
+def _jload(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _jdump(obj, path):
+    with open(path, "w") as f:
+        json.dump(obj, f)
+
+
+def _write(path, text):
+    with open(path, "w") as f:
+        f.write(text)
+
 LPID = "ALP-2975f6"
 POOL = "erd1qqqqqqqqqqqqqpgq" + "p" * 42
 ROUTER = "erd1qqqqqqqqqqqqqpgq" + "r" * 42
@@ -170,10 +185,10 @@ class DiscoveryTests(unittest.TestCase):
         c = lp.LPCache(path)
         self.assertTrue(c.is_trusted(h, "jex-pair"))
         self.assertFalse(c.is_trusted(h, "onedex"))        # approval is per adapter
-        doc = json.load(open(path))
+        doc = _jload(path)
         doc["trusted"]["zz"] = "jex-pair"
         doc["trusted"]["C" * 43 + "="] = "nope"
-        json.dump(doc, open(path, "w"))
+        _jdump(doc, path)
         self.assertEqual(list(lp.LPCache(path).trusted), [h])
 
     def test_hostile_decimal_overflow_does_not_raise(self):
@@ -392,7 +407,7 @@ class DiscoveryTests(unittest.TestCase):
         ch = Chain({WEGLD: 12 * E18, OTHER: 50 * E18}, pair_views())
         self.assertIn(LPID, run(ch))
         self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
-        doc = json.load(open(path))
+        doc = _jload(path)
         self.assertEqual(doc["pools"][LPID]["sc"], POOL)
         self.assertNotIn("usd", json.dumps(doc["pools"]))   # no price/reserve in the pool entries
         lp.set_cache_path(path)                         # "next launch"
@@ -429,10 +444,10 @@ class DiscoveryTests(unittest.TestCase):
         os.makedirs(os.path.dirname(path))
         for blob in ("not json", "[]", json.dumps({"v": 1, "pools": {"x": 1, LPID: {"sc": "evil", "spec": "xexchange-pair"},
                      "BBB-123456": {"sc": POOL, "spec": "nope"}}, "fail": {LPID: "now", "CCC-123456": True}})):
-            open(path, "w").write(blob)
+            _write(path, blob)
             c = lp.LPCache(path)
             self.assertEqual((c.pools, c.fail), ({}, {}))
-        open(path, "w").write("x" * (lp.MAX_CACHE_BYTES + 1))
+        _write(path, "x" * (lp.MAX_CACHE_BYTES + 1))
         self.assertEqual(lp.LPCache(path).pools, {})
 
     def test_second_pass_after_transient_failure(self):

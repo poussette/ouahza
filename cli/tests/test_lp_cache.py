@@ -1,3 +1,4 @@
+import json
 """LP price reuse (5 min), known-pool fast path and batched token facts."""
 import os
 import sys
@@ -14,6 +15,21 @@ from test_lp import (E18, LPID, OTHER, POOL, WEGLD, Chain, FakeResp, pair_views,
 
 fetch = pricing._fetch_token_info
 
+
+
+def _jload(path):
+    with open(path) as f:
+        return json.load(f)
+
+
+def _jdump(obj, path):
+    with open(path, "w") as f:
+        json.dump(obj, f)
+
+
+def _write(path, text):
+    with open(path, "w") as f:
+        f.write(text)
 
 def price(chain, ids=(LPID,)):
     with mock.patch("requests.request", chain):
@@ -119,7 +135,7 @@ class LPCacheTests(unittest.TestCase):
             path = os.path.join(d, "lp_cache.json")
             lp.set_cache_path(path)
             price(self.chain())
-            doc = json.load(open(path))
+            doc = _jload(path)
             self.assertEqual(doc["pools"][LPID]["tokens"], [WEGLD, OTHER])
             lp.set_cache_path(None)          # the app is closed...
             real = lp.time.time              # ...and restarted > 5 min later: cold prices, warm pools
@@ -132,7 +148,7 @@ class LPCacheTests(unittest.TestCase):
             self.assertNotIn("getFirstTokenId", names)
             self.assertIn("getReservesAndTotalSupply", names)
             self.assertTrue(any("/esdt/" in x[1] for x in c.calls))   # balances still cross-checked
-            self.assertEqual(json.load(open(path))["pools"][LPID]["tokens"], [WEGLD, OTHER])
+            self.assertEqual(_jload(path)["pools"][LPID]["tokens"], [WEGLD, OTHER])
 
     def test_bad_persisted_tokens_ignored(self):
         import json
@@ -140,8 +156,7 @@ class LPCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "lp_cache.json")
             for bad in (["x", "y"], [WEGLD, WEGLD], [WEGLD], "nope", [1, 2]):
-                json.dump({"v": 1, "pools": {LPID: {"sc": POOL, "spec": "xexchange-pair", "tokens": bad}}},
-                          open(path, "w"))
+                _jdump({"v": 1, "pools": {LPID: {"sc": POOL, "spec": "xexchange-pair", "tokens": bad}}}, path)
                 lp.set_cache_path(None)
                 lp.set_cache_path(path)
                 self.assertNotIn("tokens", lp.get_cache().pools[LPID])
@@ -151,8 +166,8 @@ class LPCacheTests(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "lp_cache.json")
-            json.dump({"v": 1, "pools": {LPID: {"sc": POOL, "spec": "xexchange-pair",
-                                                "tokens": [WEGLD, "FAKE-123456"]}}}, open(path, "w"))
+            _jdump({"v": 1, "pools": {LPID: {"sc": POOL, "spec": "xexchange-pair",
+                                                "tokens": [WEGLD, "FAKE-123456"]}}}, path)
             lp.set_cache_path(None)
             lp.set_cache_path(path)
             out = price(self.chain())        # reserves belong to WEGLD/OTHER, not FAKE

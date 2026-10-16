@@ -26,7 +26,7 @@ optional BEACONCHAIN_API_KEY raises the (generous) default rate limit.
 
 from __future__ import annotations
 
-__version__ = "0.1.40"
+__version__ = "0.1.42"
 
 
 
@@ -54,10 +54,10 @@ from .safe import (
 # rate-limited and occasionally flaky, so a single endpoint isn't reliable
 # enough on its own. If ETH_RPC_URL is set (and is https), it's tried first.
 _DEFAULT_RPCS = [
-    "https://eth.llamarpc.com",
     "https://ethereum-rpc.publicnode.com",
     "https://rpc.ankr.com/eth",
     "https://cloudflare-eth.com",
+    "https://eth.llamarpc.com",  # last: currently answers HTTP 525 (SSL handshake)
 ]
 
 
@@ -317,7 +317,14 @@ class EthereumProvider(BaseProvider):
                         )
                     )
         except requests.RequestException as exc:
-            warnings.append(f"could not fetch beacon-chain staking: {safe_error(exc)}")
+            code = getattr(getattr(exc, "response", None), "status_code", None)
+            if code in (401, 403) or "HTTP 401" in str(exc) or "HTTP 403" in str(exc):
+                warnings.append(
+                    "staked ETH not checked: beaconcha.in now requires an API key "
+                    "(Settings > beaconcha.in key)"
+                )
+            else:
+                warnings.append(f"could not fetch beacon-chain staking: {safe_error(exc)}")
 
         if warnings:
             wallet.warning = "; ".join(warnings)
