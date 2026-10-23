@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.45"
+__version__ = "0.1.46"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.45"
+APP_VERSION = "0.1.46"
 
 
 def _version_problems() -> list[str]:
@@ -754,6 +754,12 @@ class OuahzaApp(App):
         self.logs_btn.bind(on_release=self.open_logs)
         logs_row.add_widget(self.logs_btn)
         logs_row.add_widget(Widget())
+        self.locked_btn = RoundedButton(
+            text="Tokens lockés ?", bg=SURFACE2, fg=rgba(FAINT_HEX), font_size=sp(11), bold=False, radius=dp(10),
+            size_hint=(None, 1), width=dp(120),
+        )
+        self.locked_btn.bind(on_release=self.open_locked_analysis)
+        logs_row.add_widget(self.locked_btn)
         root.add_widget(logs_row)
 
         # Barre figée : en-tête du wallet ouvert quand le sien a défilé hors écran.
@@ -1575,6 +1581,121 @@ class OuahzaApp(App):
         box.add_widget(row)
         popup.open()
 
+    # ------------------------------------------------- tokens lockés (analyse)
+
+    def _mvx_addresses(self):
+        try:
+            entries = report.parse_input_text(self.settings.get("config_text", ""))
+        except ValueError:
+            return []
+        out = []
+        for _label, chain, addr in entries:
+            if chain in (None, "multiversx", "mvx", "egld") and addr.startswith("erd1") and addr not in out:
+                out.append(addr)
+        return out
+
+    def open_locked_analysis(self, _instance):
+        """Popup : analyse approfondie (une seule fois) des tokens envoyés à des smart
+        contracts sans reçu (staking, lock, prêts). Lecture de tout l'historique : longue."""
+        if self.running:
+            return
+        addrs = self._mvx_addresses()
+        box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
+        popup = self._popup("Tokens lockés (MultiversX)", box, size_hint=(0.92, None), height=dp(380))
+        if not addrs:
+            box.add_widget(WrapLabel(text="Aucun wallet MultiversX dans la configuration.", color=TEXT, font_size=sp(13)))
+            close = RoundedButton(text="Fermer", bg=ACCENT, fg=BG, size_hint=(1, None), height=dp(48))
+            close.bind(on_release=lambda _b: popup.dismiss())
+            box.add_widget(close)
+            popup.open()
+            return
+        from providers import mvx_flows as _fl
+        done = sum(1 for a in addrs if _fl.progress(a)[2])
+        txt = (
+            "Des tokens envoyés à un smart contract (staking, lock, prêt) sans reçu en retour "
+            "n'apparaissent pas dans le solde. Pour les estimer, il faut relire tout l'historique "
+            "de transferts de chaque wallet.\n\n"
+            "[b]Attention : c'est long[/b] (environ 1 minute pour 4 000 transferts, davantage si l'API "
+            "ralentit ; parfois plusieurs dizaines de minutes pour un gros wallet). Garde l'application "
+            "ouverte. Une seule analyse suffit : le résultat est conservé, les actualisations suivantes "
+            "n'ont rien à relire.\n\n"
+            f"{len(addrs)} wallet(s) MultiversX, {done} déjà analysé(s) en entier."
+        )
+        box.add_widget(WrapLabel(text=txt, color=TEXT, font_size=sp(12.5), markup=True))
+        row = BoxLayout(size_hint=(1, None), height=dp(48), spacing=dp(10))
+        cancel = RoundedButton(text="Annuler", bg=SURFACE2)
+        go = RoundedButton(text="Lancer l'analyse", bg=ACCENT, fg=BG)
+        cancel.bind(on_release=lambda _b: popup.dismiss())
+
+        def start(_b):
+            popup.dismiss()
+            self._start_locked_analysis(addrs)
+
+        go.bind(on_release=start)
+        row.add_widget(cancel)
+        row.add_widget(go)
+        box.add_widget(row)
+        popup.open()
+
+    def _start_locked_analysis(self, addrs):
+        if self.running:
+            return
+        self.running = True
+        self.run_btn.disabled = True
+        self.locked_btn.disabled = True
+        self.run_btn.text = "Analyse..."
+        self.status_label.text = "Analyse des tokens lockés : démarrage..."
+        self._busy_start()
+        threading.Thread(target=self._locked_worker, args=(addrs,), daemon=True).start()
+
+    def _locked_worker(self, addrs):
+        def say(msg):
+            Clock.schedule_once(lambda dt: setattr(self.status_label, "text", msg))
+
+        errors = []
+        try:
+            from providers import multiversx as _mvx
+            from providers import mvx_flows as _fl
+            from providers.net import request_json
+            _mvx.set_empty_cache_path(os.path.join(self.user_data_dir, "mvx_empty.json"))
+            for i, addr in enumerate(addrs, 1):
+                tag = f"[{i}/{len(addrs)}] {addr[:8]}…{addr[-4:]}"
+                qaddr = _mvx.quote(addr, safe="")
+
+                def get(suffix, params, qaddr=qaddr):
+                    return request_json("GET", f"{_mvx.MVX_API}/accounts/{qaddr}{suffix}", params=params)
+
+                def on_prog(res, tag=tag, addr=addr):
+                    seen, total, _d = _fl.progress(addr)
+                    pct = f"{res.percent} %" if res.percent is not None else "…"
+                    say(f"Tokens lockés {tag} : {pct} ({seen}/{total or '?'} transferts)")
+
+                def on_wait(delay, _exc, tag=tag):
+                    say(f"Tokens lockés {tag} : API saturée, reprise dans {int(delay)} s...")
+
+                try:
+                    _fl.catch_up(addr, get, on_progress=on_prog, on_wait=on_wait)
+                except Exception as exc:
+                    errors.append(f"{addr[:8]}…: {safe_error(exc)}")
+                _fl.save_cache()
+        except Exception as exc:
+            errors.append(safe_error(exc) or exc.__class__.__name__)
+
+        def finish(_dt):
+            self.running = False
+            self._busy_stop()
+            self.run_btn.disabled = False
+            self.locked_btn.disabled = False
+            self.run_btn.text = "Actualiser"
+            if errors:
+                self.status_label.text = ("Analyse interrompue (progression conservée, relance-la pour reprendre) : "
+                                          + clean_text(errors[0], 120))
+            else:
+                self.status_label.text = "Analyse des tokens lockés terminée. Appuie sur Actualiser pour les voir."
+                self._fresh = None
+
+        Clock.schedule_once(finish)
+
     def open_export(self, _instance):
         if not self.last_results:
             return
@@ -1654,6 +1775,7 @@ class OuahzaApp(App):
             os.environ["WALLET_DATA_API_TOKEN"] = self.settings.get("data_api_token", "") or ""
             # Valorisation des LP toujours active ; un contrat inconnu n'est valorisé qu'après
             # approbation explicite (bannière « pools LP à approuver »), jamais en mode permissif.
+            os.environ["MVX_FLOWS"] = "cache"   # actualisation : jamais de lecture d'historique (bouton « Tokens lockés »)
             os.environ["WALLET_LP_PRICING"] = "1"
             os.environ["WALLET_LP_TRUST_ALL"] = "0"
 

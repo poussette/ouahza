@@ -38,7 +38,7 @@ delegation contract, not the wallet, so it's covered too:
 
 from __future__ import annotations
 
-__version__ = "0.1.45"
+__version__ = "0.1.46"
 
 
 
@@ -546,21 +546,35 @@ class MultiversXProvider(BaseProvider):
         # Tokens sent to a smart contract that gives no receipt back (locker,
         # staking, vesting...): estimated from the whole transfer history,
         # read a slice per refresh (providers/mvx_flows.py).
-        if os.environ.get("MVX_FLOWS", "1") != "0":
+        # MVX_FLOWS=cache (Android): saved ledger only, no history read, no extra
+        # call; the deep analysis is started on demand (mvx_flows.catch_up).
+        flows_mode = os.environ.get("MVX_FLOWS", "1")
+        if flows_mode != "0":
             try:
-                res = mvx_flows.engaged_positions(
-                    address,
-                    lambda suffix, params: request_json(
-                        "GET", f"{MVX_API}/accounts/{qaddr}{suffix}", params=params),
-                )
-                budget = [mvx_flows.HINTS_PER_REFRESH]
+                cache_only = flows_mode == "cache"
+                if cache_only:
+                    res = mvx_flows.cached_result(address)
+                    if res is None:
+                        warnings.append("locked tokens not analysed (use the deep analysis button)")
+                        res = mvx_flows.Result([], False, None, "")
+                        skip_flows = True
+                    else:
+                        skip_flows = False
+                else:
+                    res = mvx_flows.engaged_positions(
+                        address,
+                        lambda suffix, params: request_json(
+                            "GET", f"{MVX_API}/accounts/{qaddr}{suffix}", params=params),
+                    )
+                budget = [0 if cache_only else mvx_flows.HINTS_PER_REFRESH]
                 for pos in res.positions:
                     short = f"{pos.contract[:10]}…{pos.contract[-4:]}"
                     cname = pos.contract_name or mvx_flows.contract_name(
                         pos.contract,
-                        lambda c: request_json("GET", f"{MVX_API}/accounts/{quote(c, safe='')}", params={"fields": "address,assets"}),
-                        lambda c: request_json("GET", f"{MVX_API}/accounts/{quote(c, safe='')}/transfers",
-                                               params={"size": 5, "status": "success"}),
+                        (lambda c: None) if cache_only else lambda c: request_json("GET", f"{MVX_API}/accounts/{quote(c, safe='')}", params={"fields": "address,assets"}),
+                        None if cache_only else lambda c: request_json(
+                            "GET", f"{MVX_API}/accounts/{quote(c, safe='')}/transfers",
+                            params={"size": 5, "status": "success"}),
                     )
                     where = f"{cname} ({short})" if cname else short
                     hint_deps, hint_exits = mvx_flows.position_hints(
@@ -587,9 +601,11 @@ class MultiversXProvider(BaseProvider):
                     )
                 if res.error:
                     warnings.append(f"locked-token estimate unavailable: {res.error}")
+                elif cache_only and skip_flows:
+                    pass
                 elif not res.done:
                     pct = f" ({res.percent}%)" if res.percent is not None else ""
-                    warnings.append(f"locked-token history still being read{pct}: provisional estimate")
+                    warnings.append(f"locked-token history {'partly analysed' if cache_only else 'still being read'}{pct}: provisional estimate")
             except requests.RequestException as exc:
                 warnings.append(f"could not estimate locked tokens: {safe_error(exc)}")
 

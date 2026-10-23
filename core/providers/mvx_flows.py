@@ -28,7 +28,7 @@ LAG_SECONDS is integrated at all (indexer lag).
 """
 from __future__ import annotations
 
-__version__ = "0.1.45"
+__version__ = "0.1.46"
 
 import json
 import os
@@ -671,6 +671,20 @@ def engaged_positions(address: str, get: Callable[[str, dict], object], now: flo
     if not st.done and st.total:
         percent = max(0, min(99, int(100 * st.seen / st.total)))
     return Result(st.positions(), st.done, percent, error)
+
+
+def cached_result(address: str) -> "Result | None":
+    """Estimate from the saved ledger only, NO network call (Android refresh).
+    None when this wallet was never analysed."""
+    with _lock:
+        st = _states.get(address)
+        if st is None or not (st.seen or st.done):
+            return None
+        st.address = address
+        percent = None
+        if not st.done and st.total:
+            percent = max(0, min(99, int(100 * st.seen / st.total)))
+        return Result(st.positions(), st.done, percent, "")
 
 
 def progress(address: str) -> tuple[int, int | None, bool]:
