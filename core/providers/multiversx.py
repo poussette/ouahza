@@ -38,7 +38,7 @@ delegation contract, not the wallet, so it's covered too:
 
 from __future__ import annotations
 
-__version__ = "0.1.43"
+__version__ = "0.1.44"
 
 
 
@@ -57,6 +57,7 @@ import requests
 
 from . import dataapi, lp
 from .base import BaseProvider, TokenBalance, WalletBalance
+from . import mvx_flows
 from .net import request_json
 from .safe import clean_text, safe_decimals, safe_error, write_private
 
@@ -149,6 +150,8 @@ _EMPTY = EmptyCache()
 def set_empty_cache_path(path: str | None) -> None:
     """Keep the "nothing there" answers in `path` (None = memory only)."""
     global _EMPTY
+    # the locked-token ledgers live next to it
+    mvx_flows.set_cache_path(os.path.join(os.path.dirname(path), "mvx_flows.json") if path else None)
     if path is not None and _EMPTY.path == path:
         return
     _EMPTY = EmptyCache(path)
@@ -156,6 +159,7 @@ def set_empty_cache_path(path: str | None) -> None:
 
 def save_empty_cache() -> None:
     _EMPTY.save()
+    mvx_flows.save_cache()
 
 
 def _get(path: str):
@@ -538,6 +542,56 @@ class MultiversXProvider(BaseProvider):
             pass
         except requests.RequestException as exc:
             warnings.append(f"could not fetch validator stake: {safe_error(exc)}")
+
+        # Tokens sent to a smart contract that gives no receipt back (locker,
+        # staking, vesting...): estimated from the whole transfer history,
+        # read a slice per refresh (providers/mvx_flows.py).
+        if os.environ.get("MVX_FLOWS", "1") != "0":
+            try:
+                res = mvx_flows.engaged_positions(
+                    address,
+                    lambda suffix, params: request_json(
+                        "GET", f"{MVX_API}/accounts/{qaddr}{suffix}", params=params),
+                )
+                budget = [mvx_flows.HINTS_PER_REFRESH]
+                for pos in res.positions:
+                    short = f"{pos.contract[:10]}…{pos.contract[-4:]}"
+                    cname = pos.contract_name or mvx_flows.contract_name(
+                        pos.contract,
+                        lambda c: request_json("GET", f"{MVX_API}/accounts/{quote(c, safe='')}", params={"fields": "address,assets"}),
+                        lambda c: request_json("GET", f"{MVX_API}/accounts/{quote(c, safe='')}/transfers",
+                                               params={"size": 5, "status": "success"}),
+                    )
+                    where = f"{cname} ({short})" if cname else short
+                    hint_deps, hint_exits = mvx_flows.position_hints(
+                        address, pos,
+                        lambda c: request_json("GET", f"{MVX_API}/accounts/{qaddr}/transfers",
+                                               params={"receiver": c, "size": 25, "status": "success"}),
+                        lambda c: request_json("GET", f"{MVX_API}/accounts/{quote(c, safe='')}/transfers",
+                                               params={"size": 50, "status": "success"}),
+                        budget,
+                    )
+                    extra = ""
+                    if hint_deps:
+                        extra += f" · sent with: {hint_deps[0][1] or '?'} (tx {hint_deps[0][0][:10]}…)"
+                    if hint_exits:
+                        extra += f" · other calls: {', '.join(hint_exits)}"
+                    wallet.tokens.append(
+                        TokenBalance(
+                            symbol=pos.ticker,
+                            name=f"{pos.ticker} locked in {where} (estimated){extra}",
+                            amount=pos.amount,
+                            contract=pos.token,
+                            asset_type="locked-estimate",
+                        )
+                    )
+                if res.error:
+                    warnings.append(f"locked-token estimate unavailable: {res.error}")
+                elif not res.done:
+                    pct = f" ({res.percent}%)" if res.percent is not None else ""
+                    warnings.append(f"locked-token history still being read{pct}: provisional estimate")
+            except requests.RequestException as exc:
+                warnings.append(f"could not estimate locked tokens: {safe_error(exc)}")
 
         if self.truncated:
             warnings.append(f"asset list truncated at {MAX_PAGES * PAGE_SIZE} entries")

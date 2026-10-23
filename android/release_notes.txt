@@ -1,2 +1,10 @@
-v0.1.43 : Correction d'affichage
-- Les très gros montants des cartes (labels, wallets) rétrécissent réellement pour tenir sur une seule ligne (la correction de la 0.1.42 ne s'appliquait pas aux colonnes de largeur fixe).
+v0.1.44 : Tokens verrouillés : moins de faux positifs
+- Lignes « verrouillé dans… » : le nom public du contrat (lu dans ses transferts) s'affiche en plus de l'adresse raccourcie, et il est mémorisé.
+- Tokens verrouillés : la ligne indique la fonction et la transaction d'envoi, et les autres fonctions du contrat (unlock, withdraw...) pour les récupérer.
+- Un contrat qui a reçu plus de 4 tokens différents (routeur, agrégateur, carnet d'ordres) n'est plus compté comme un verrouillage.
+- Plafond d'affichage relevé (120) : les petits verrouillages ne sont plus masqués par les gros montants.
+- CLI : --flows-ignore et --flows-trust (ou MVX_FLOWS_IGNORE / MVX_FLOWS_TRUST) pour exclure ou forcer un contrat.
+- Une position est maintenant attribuée au contrat que le wallet a appelé, pas à celui qui paie : un retrait via un proxy ou un autre contrat annule bien le dépôt.
+- Une transaction qui envoie des tokens et en reçoit en retour (échange, liquidité, farm, prêt) est ignorée des deux côtés : la sortie d'un échange ne diminue plus une position.
+- Le cache d'historique change de format : la lecture repart de zéro une fois.
+- CLI : --flows-explain [TOKEN] détaille le grand livre (contrat, net, dépôts, retraits, dernier dépôt, fonctions appelées).

@@ -25,7 +25,7 @@ address, its platform id to TOKEN_PLATFORM_IDS.
 
 from __future__ import annotations
 
-__version__ = "0.1.43"
+__version__ = "0.1.44"
 
 
 
@@ -167,7 +167,7 @@ NATIVE_DENOMINATED_TYPES = {
 }
 
 # Asset types that are individually priced by contract address.
-CONTRACT_PRICED_TYPES = {"token", "esdt", "meta-esdt"}
+CONTRACT_PRICED_TYPES = {"token", "esdt", "meta-esdt", "locked-estimate"}
 
 
 def _fetch_native_prices(chain_ids: set[str]) -> dict[str, dict[str, float]]:

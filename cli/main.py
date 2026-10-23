@@ -66,7 +66,7 @@ Optional environment variables:
 
 from __future__ import annotations
 
-__version__ = "0.1.43"
+__version__ = "0.1.44"
 
 
 
@@ -435,7 +435,64 @@ def write_csv(results: list[WalletBalance], path: Path) -> None:
     _write_private(path, buf.getvalue(), newline="")
 
 
+def catch_up_flows(entries: list[tuple[str | None, str | None, str]]) -> None:
+    """Read the full transfer history of every MultiversX wallet before the balances,
+    showing the progress (the locked-token estimate is only complete at 100 %)."""
+    import time
+    from urllib.parse import quote
+
+    from providers import mvx_flows as fl
+    from providers.multiversx import MVX_API
+    from providers.net import request_json
+
+    wallets: list[str] = []
+    for _label, chain, addr in entries:
+        cls = get_provider_by_name(chain) if chain else detect_provider(addr)
+        if cls is not None and cls.chain_id == "multiversx" and cls.matches(addr) and addr not in wallets:
+            wallets.append(addr)
+    for n, addr in enumerate(wallets, 1):
+        _s, _t, done = fl.progress(addr)
+        if done:
+            continue
+        q = quote(addr, safe="")
+        started = time.time()
+        tag = f"[{n}/{len(wallets)}] {addr[:10]}…{addr[-4:]}"
+
+        def show(res, tag=tag, addr=addr, started=started):
+            seen, total, done = fl.progress(addr)
+            pct = 100 if res.done else (res.percent if res.percent is not None else 0)
+            of = f" / {total:,}" if total else ""
+            msg = f"\r  {tag}  locked-estimate : {pct:3d} %  ({seen:,}{of} transferts, {int(time.time() - started)} s)"
+            if res.error:
+                msg += f"  -- {res.error}"
+            print(msg, end="\n" if (res.done or res.error) else "", file=sys.stderr, flush=True)
+
+        def waiting(delay, exc, tag=tag):
+            print(f"\n  {tag}  API busy ({safe_error(exc)}): waiting {int(delay)} s then continuing...",
+                  file=sys.stderr, flush=True)
+
+        try:
+            res = fl.catch_up(addr, lambda suffix, params, q=q: request_json(
+                "GET", f"{MVX_API}/accounts/{q}{suffix}", params=params), show, on_wait=waiting)
+            if res is not None and not res.done and not res.error:
+                print(f"\n  {tag}  history not complete (no progress); relaunch to continue", file=sys.stderr)
+        except KeyboardInterrupt:
+            fl.save_cache()
+            print(f"\n  {tag}  interrupted: progress saved, relaunch to continue", file=sys.stderr)
+            raise
+        except Exception as exc:  # network trouble: what was read is kept
+            fl.save_cache()
+            print(f"\n  {tag}  stopped: {safe_error(exc)} (progress saved, relaunch to continue)", file=sys.stderr)
+
+
 def main() -> int:
+    try:
+        return _main()
+    except KeyboardInterrupt:
+        return 130
+
+
+def _main() -> int:
     if "--version" in sys.argv[1:]:
         from providers import version as _version
         for name, v in sorted(_version.collect({"main": __version__}).items()):
@@ -484,6 +541,51 @@ def main() -> int:
         "Use --lp-cache none to disable",
     )
     parser.add_argument(
+        "--flows-cache",
+        metavar="FILE",
+        default=None,
+        help="Where to remember how far each MultiversX wallet's transfer history was read "
+        "(locked-token estimate; aggregates only). A long history is read over several runs: "
+        "keep this file between runs. Default: ~/.ouahza/mvx_flows.json "
+        "(env WALLET_FLOWS_CACHE also works). Use --flows-cache none to keep it in memory only",
+    )
+    parser.add_argument(
+        "--no-flows",
+        action="store_true",
+        help="Do not estimate tokens locked in smart contracts (staking/locker without receipt)",
+    )
+    parser.add_argument(
+        "--flows-once",
+        action="store_true",
+        help="Read only one slice of the transfer history per run (old behaviour: run several "
+        "times). By default the CLI reads the whole history in one go and shows the progress",
+    )
+    parser.add_argument(
+        "--flows-ignore", metavar="ADDR[,ADDR]", default=None,
+        help="Contracts never counted as locked tokens (full address, or 8+ chars of its start/end). "
+        "WALLET:CONTRACT limits the exclusion to one wallet (e.g. a lock closed with a penalty). "
+        "Env MVX_FLOWS_IGNORE",
+    )
+    parser.add_argument(
+        "--flows-trust", metavar="ADDR[,ADDR]", default=None,
+        help="Contracts always counted even if they hold many tokens. Env MVX_FLOWS_TRUST",
+    )
+    parser.add_argument(
+        "--flows-explain",
+        metavar="TOKEN",
+        nargs="?",
+        const="*",
+        default=None,
+        help="After the run, list the locked-token ledger of each MultiversX wallet (contract, net, "
+        "deposits, withdrawals, last deposit, functions called); optionally only for tokens "
+        "matching TOKEN (e.g. JEX). To understand or doubt an estimate",
+    )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help="At the end, print the per-host request log (calls, seconds, retries, errors) on stderr",
+    )
+    parser.add_argument(
         "--lp-trust-all",
         action="store_true",
         help="Permissive mode: LP pools whose contract code is not a known one are "
@@ -504,6 +606,17 @@ def main() -> int:
     cache_arg = args.lp_cache or os.environ.get("WALLET_LP_CACHE") or _lp_default.default_cache_path()
     from providers import lp as _lp_module
     _lp_module.set_cache_path(None if cache_arg.lower() == "none" else cache_arg)
+    from providers import mvx_flows as _flows
+    if args.flows_ignore:
+        os.environ["MVX_FLOWS_IGNORE"] = args.flows_ignore
+    if args.flows_trust:
+        os.environ["MVX_FLOWS_TRUST"] = args.flows_trust
+    if args.no_flows:
+        os.environ["MVX_FLOWS"] = "0"
+    else:
+        flows_arg = args.flows_cache or os.environ.get("WALLET_FLOWS_CACHE") or os.path.join(
+            os.path.expanduser("~"), ".ouahza", "mvx_flows.json")
+        _flows.set_cache_path(None if flows_arg.lower() == "none" else flows_arg)
     if args.mvx_gateway:
         if not validate_rpc_url(args.mvx_gateway):
             print("--mvx-gateway must be an https:// URL.", file=sys.stderr)
@@ -525,7 +638,10 @@ def main() -> int:
         print("No addresses found in input file.", file=sys.stderr)
         return 1
 
+    if not args.no_flows and not args.flows_once and os.environ.get("MVX_FLOWS", "1") != "0":
+        catch_up_flows(entries)
     results = fetch_all(entries, workers=args.workers)
+    _flows.save_cache()
 
     priced_ok = True
     if not args.no_price:
@@ -564,6 +680,20 @@ def main() -> int:
 
     # Always show the table on screen.
     print_table(results)
+
+    if args.flows_explain is not None:
+        for w in results:
+            if w.chain == "multiversx":
+                lines = _flows.describe(w.address, None if args.flows_explain == "*" else args.flows_explain)
+                print(f"\n[flows] {w.address}", file=sys.stderr)
+                for line in lines or ["(nothing in the ledger)"]:
+                    print("  " + line, file=sys.stderr)
+                for line in _flows.describe_hints(w.address):
+                    print("  " + line, file=sys.stderr)
+
+    if args.stats:
+        from providers import net as _net
+        print(_net.stats_report(), file=sys.stderr)
 
     if args.output:
         fmt = args.format or (

@@ -5,7 +5,7 @@ config format directly instead of pointing at a file on disk)."""
 
 from __future__ import annotations
 
-__version__ = "0.1.43"
+__version__ = "0.1.44"
 
 
 
