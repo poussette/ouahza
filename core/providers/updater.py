@@ -10,7 +10,7 @@ and an update over the installed app keeps its private data/settings).
 
 from __future__ import annotations
 
-__version__ = "0.1.46"
+__version__ = "0.1.47"
 
 import hashlib
 import hmac

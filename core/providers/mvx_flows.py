@@ -28,7 +28,7 @@ LAG_SECONDS is integrated at all (indexer lag).
 """
 from __future__ import annotations
 
-__version__ = "0.1.46"
+__version__ = "0.1.47"
 
 import json
 import os

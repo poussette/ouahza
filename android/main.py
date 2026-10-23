@@ -14,7 +14,7 @@ wallet to see its positions. Refresh/Copy actions sit at the bottom.
 
 from __future__ import annotations
 
-__version__ = "0.1.46"
+__version__ = "0.1.47"
 
 
 
@@ -62,7 +62,7 @@ from kivy.utils import escape_markup, platform
 import report
 from providers.safe import clean_text, safe_error, validate_rpc_url, write_private
 
-APP_VERSION = "0.1.46"
+APP_VERSION = "0.1.47"
 
 
 def _version_problems() -> list[str]:
@@ -316,6 +316,22 @@ def mk_amount(text, size=14, **kwargs):
     lbl.bind(width=refit, text=refit)
     refit(lbl)
     return lbl
+
+
+class TapLabel(ButtonBehavior, Label):
+    """Texte orange cliquable (même comportement de retour à la ligne que WrapLabel)."""
+
+    def __init__(self, **kwargs):
+        kwargs.setdefault("halign", "left")
+        kwargs.setdefault("valign", "middle")
+        kwargs.setdefault("color", TEXT)
+        kwargs.setdefault("size_hint", (1, None))
+        super().__init__(**kwargs)
+        self.bind(width=self._upd, texture_size=self._upd)
+
+    def _upd(self, *_):
+        self.text_size = (self.width, None)
+        self.height = max(dp(24), self.texture_size[1] + dp(8))
 
 
 class WrapLabel(Label):
@@ -1594,12 +1610,12 @@ class OuahzaApp(App):
                 out.append(addr)
         return out
 
-    def open_locked_analysis(self, _instance):
+    def open_locked_analysis(self, _instance, addrs=None):
         """Popup : analyse approfondie (une seule fois) des tokens envoyés à des smart
         contracts sans reçu (staking, lock, prêts). Lecture de tout l'historique : longue."""
         if self.running:
             return
-        addrs = self._mvx_addresses()
+        addrs = addrs or self._mvx_addresses()
         box = BoxLayout(orientation="vertical", padding=dp(12), spacing=dp(10))
         popup = self._popup("Tokens lockés (MultiversX)", box, size_hint=(0.92, None), height=dp(380))
         if not addrs:
@@ -1691,8 +1707,9 @@ class OuahzaApp(App):
                 self.status_label.text = ("Analyse interrompue (progression conservée, relance-la pour reprendre) : "
                                           + clean_text(errors[0], 120))
             else:
-                self.status_label.text = "Analyse des tokens lockés terminée. Appuie sur Actualiser pour les voir."
+                self.status_label.text = "Analyse des tokens lockés terminée : actualisation..."
                 self._fresh = None
+                self.on_run(None)
 
         Clock.schedule_once(finish)
 
@@ -2176,9 +2193,20 @@ class OuahzaApp(App):
             ))
             return body
         if w.warning:
-            body.add_widget(WrapLabel(
-                text=f"[color={ORANGE_HEX}]{esc(w.warning)}[/color]", markup=True, font_size=sp(11),
-            ))
+            low = w.warning.lower()
+            lock_warn = "locked-token" in low or "locked tokens not analysed" in low
+            if lock_warn and str(w.address).startswith("erd1"):
+                warn = TapLabel(
+                    text=f"[color={ORANGE_HEX}]{esc(w.warning)}[/color]\n"
+                         f"[color={ORANGE_HEX}][u]Touche ici : analyser les tokens lockés de ce wallet[/u][/color]",
+                    markup=True, font_size=sp(11),
+                )
+                warn.bind(on_release=lambda _b, a=w.address: self.open_locked_analysis(None, [a]))
+                body.add_widget(warn)
+            else:
+                body.add_widget(WrapLabel(
+                    text=f"[color={ORANGE_HEX}]{esc(w.warning)}[/color]", markup=True, font_size=sp(11),
+                ))
 
         stats = self._type_stats([w])
         if stats:

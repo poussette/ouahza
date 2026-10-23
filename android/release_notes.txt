@@ -1,6 +1,3 @@
-v0.1.46 : Tokens lockés : une seule analyse, à la demande
-- Actualiser ne lit plus l'historique des tokens lockés : plus de lectures partielles sur plusieurs actualisations, l'actualisation redevient rapide.
-- Nouveau bouton « Tokens lockés ? » : une analyse approfondie en une fois (avertissement sur la durée, progression affichée, reprise automatique si l'API sature).
-- Le résultat est conservé : les actualisations suivantes affichent les lignes « verrouillé dans… » sans rien relire.
-- Tant qu'aucune analyse n'a été faite, un avertissement l'indique sur le wallet.
-- CLI inchangée (lecture complète avec pourcentage).
+v0.1.47 : Tokens lockés : analyse par wallet
+- Le message orange « locked-token… » d'un wallet est cliquable : il lance l'analyse de CE wallet (avertissement sur la durée), puis actualise tout seul.
+- À la fin du bouton « Tokens lockés ? », l'actualisation se lance automatiquement.
