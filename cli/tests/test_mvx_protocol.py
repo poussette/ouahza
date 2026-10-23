@@ -38,6 +38,20 @@ class TestProtocolNet(unittest.TestCase):
         self.assertEqual(len(pos), 1)
         self.assertAlmostEqual(pos[0].amount, 55154.0)
 
+    def test_a_lock_is_not_hidden_by_huge_flows_of_other_modules(self):
+        """Seen on a real wallet: 1,000 JEX locked, JEXchange modules paid out millions of JEX."""
+        mods = [("erd1qqqqqqqqqqqqqpgqwkqnf30j7hj4r797kahr0p5t5nsksc8a73eqd732jd", "JEXchange: Staking Module", -1105483),
+                ("erd1qqqqqqqqqqqqqpgq360nakqgsp5zkmguptucpjy6n4n3du7e5snsd2swzq", "JEXchange: Aggregator v2", -1190540)]
+        st = state([(LOCKER, "JEXchange: Locker", "JEX-9040ca", 1000)] + [(c, n, "JEX-9040ca", v) for c, n, v in mods])
+        self.assertEqual([p.amount for p in st.positions()], [1000.0])
+        self.assertFalse(any("withdrawn elsewhere" in l for l in st.describe()))
+
+    def test_seen_on_a_real_wallet_sEGLD(self):
+        """Market +9,671, controller -12,050, liquid staking -20,214 (mints): same order of size -> closed."""
+        rows = [(MARKET, "Hatom: sEGLD Money Market", "SEGLD-3ad2d0", 9671), (CONTROLLER, "Hatom: Controller", "SEGLD-3ad2d0", -12050),
+                ("erd1qqqqqqqqqqqqqpgq4gzfcw7kmkjy8zsf04ce6dl0auhtzjx078sslvrf4e", "Hatom: Liquid Staking", "SEGLD-3ad2d0", -20214)]
+        self.assertEqual(state(rows).positions(), [])
+
     def test_other_protocols_and_unnamed_contracts_are_not_netted(self):
         st = state([(LOCKER, "JEXchange: Locker", "JEX-9040ca", 1000), (CONTROLLER, "Hatom: Controller", "JEX-9040ca", -5000)])
         self.assertEqual([p.amount for p in st.positions()], [1000.0])

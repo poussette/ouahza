@@ -28,7 +28,7 @@ LAG_SECONDS is integrated at all (indexer lag).
 """
 from __future__ import annotations
 
-__version__ = "0.1.44"
+__version__ = "0.1.45"
 
 import json
 import os
@@ -75,6 +75,7 @@ MAX_RAW = 10 ** 60
 MAX_NET_ENTRIES = 500
 MAX_ADDRESSES = 300
 MAX_CNAMES = 1000
+GROUP_CLOSE_RATIO = 3      # a protocol-wide outflow up to 3x the position still reads as 'it was withdrawn'
 MAX_CACHE_BYTES = 1_500_000
 START_WINDOW = 30 * 86400
 MAX_WINDOW = 365 * 86400
@@ -364,6 +365,11 @@ class State:
         """One line per (contract, token) of the ledger, for diagnosis."""
         rows = []
         groups = self.group_totals()
+        gpos: dict[tuple[str, str], int] = {}
+        for k2, r2 in self.net.items():
+            p2 = self._protocol(k2)
+            if p2 and r2 > 0:
+                gpos[(p2, k2.partition("|")[2])] = gpos.get((p2, k2.partition("|")[2]), 0) + r2
         for key, raw in self.net.items():
             contract, _, token = key.partition("|")
             name, ticker, decimals = self.meta.get(key, ["", token.split("-")[0], 0])
@@ -379,7 +385,7 @@ class State:
             else:
                 tag = ""
             proto = self._protocol(key)
-            if proto and raw > 0 and groups.get((proto, token), raw) <= 0:
+            if proto and raw > 0 and self._closed(proto, token, groups, gpos):
                 tag = (tag + " [protocol net <= 0: withdrawn elsewhere]").strip()
                 tag = " " + tag
             rows.append((abs(raw / 10 ** decimals), f"{tag.strip() + ' ' if tag else ''}{contract}  {name or '-'}  {ticker}  net={raw / 10 ** decimals:,.4f}"
@@ -410,6 +416,15 @@ class State:
                 out[tk] = out.get(tk, 0) + raw
         return out
 
+    def _closed(self, proto: str, token: str, totals: dict, positives: dict) -> bool:
+        """The protocol holds nothing more of this token, and what left is of the SAME SIZE as what
+        went in (a market in, its controller out). A protocol whose other modules moved far more
+        than the position (rewards, swap outputs: a lock next to a staking module) proves nothing."""
+        total = totals.get((proto, token))
+        if total is None or total > 0:
+            return False
+        return -total <= GROUP_CLOSE_RATIO * positives.get((proto, token), 0)
+
     def positions(self) -> list[Position]:
         """A deposit and its withdrawal often go through different contracts of ONE protocol
         (e.g. a lending market in, its controller out). When the net over the whole protocol
@@ -423,7 +438,13 @@ class State:
             if raw != 0:
                 c = key.partition("|")[0]
                 breadth[c] = breadth.get(c, 0) + 1
-        remaining = self.group_totals()
+        totals = self.group_totals()
+        positives: dict[tuple[str, str], int] = {}
+        for key, raw in self.net.items():
+            proto = self._protocol(key)
+            if proto and raw > 0:
+                tk = (proto, key.partition("|")[2])
+                positives[tk] = positives.get(tk, 0) + raw
         for key, raw in sorted(self.net.items(), key=lambda kv: (-kv[1], kv[0])):   # ties: fixed order, so the result never depends on the order the history was read
             if raw <= 0 or key not in self.meta:
                 continue
@@ -433,8 +454,8 @@ class State:
             if breadth.get(contract, 0) > MAX_TOKENS_PER_CONTRACT and not _matches(contract, trust):
                 continue
             proto = self._protocol(key)
-            if proto and remaining.get((proto, token), 1) <= 0:
-                continue          # the protocol holds nothing of this token any more: withdrawn through another module
+            if proto and self._closed(proto, token, totals, positives):
+                continue          # withdrawn through another module of the same protocol
             name, ticker, decimals = self.meta[key]
             out.append(Position(contract, name, token, ticker, raw / 10 ** decimals))
         out.sort(key=lambda p: -p.amount)

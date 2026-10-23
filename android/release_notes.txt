@@ -1,4 +1,4 @@
-v0.1.44 : Tokens verrouillés : moins de faux positifs
+v0.1.45 : Tokens verrouillés : moins de faux positifs
 - Lignes « verrouillé dans… » : le nom public du contrat (lu dans ses transferts) s'affiche en plus de l'adresse raccourcie, et il est mémorisé.
 - Tokens verrouillés : la ligne indique la fonction et la transaction d'envoi, et les autres fonctions du contrat (unlock, withdraw...) pour les récupérer.
 - Un contrat qui a reçu plus de 4 tokens différents (routeur, agrégateur, carnet d'ordres) n'est plus compté comme un verrouillage.
